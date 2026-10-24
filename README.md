@@ -24,6 +24,41 @@ cuotas y **PARLAY AI**, un optimizador de combinadas con la función **BUSCAR MI
 | Asistente IA | Con `ANTHROPIC_API_KEY` usa Claude con herramientas de la plataforma; sin clave, un enrutador local en español. Los números siempre salen de los modelos. |
 | Juego responsable | Verificación de mayoría de edad, límites de gasto y de sesión (los aumentos se aplican tras 24 h), autoexclusión y recursos de ayuda. |
 
+## App Android (APK)
+
+- **Descarga:** <https://github.com/cristhianlujan45-blip/Apuestas/releases/download/app-latest/apuestas-intel-co.apk>
+  (se recompila sola con cada cambio en `frontend/`).
+- **Funciona sin servidor:**
+  - El flujo `.github/workflows/datos.yml` corre cada 30 minutos: ingiere datos, ejecuta los modelos, registra
+    predicciones y publica los JSON en la rama `datos`.
+  - La app los descarga y calcula en el teléfono PARLAY AI, el valor esperado, los surebets y la calculadora.
+- **Cuotas colombianas:**
+  - Con el secreto `ODDS_API_NET_KEY` llegan solas desde el feed.
+  - Sin él, puede copiar en la app (Configuración → Mis cuotas) las cuotas que ve en su casa de apuestas. La app las
+    valora al instante con el modelo del partido.
+- **Secretos del repositorio** (Settings → Secrets and variables → Actions): `ODDS_API_NET_KEY`, `API_FOOTBALL_KEY`,
+  `API_BASKETBALL_KEY`.
+- **Compilación local:**
+  ```bash
+  cd frontend && npm run build:mobile && npx cap sync android
+  cd android && ./gradlew assembleDebug
+  ```
+
+## Cómo busca ventaja frente a las casas
+
+1. **Surebets (arbitraje):**
+   - Si la suma de 1/cuota de todas las salidas (cada una en la casa que más paga) es menor que 1, la sección
+     *Ventaja* calcula cuánto apostar en cada casa para asegurar el mismo retorno.
+2. **Valor esperado:**
+   - La validación con miles de partidos reales muestra que el precio de mercado sin margen y el ensemble predicen
+     casi igual, y mejor que cualquier modelo aislado.
+   - La ventaja está en encontrar cuotas colombianas **por encima** de esa probabilidad justa.
+3. **Mejor precio:** para cada selección se muestra la casa que más paga; en combinadas la diferencia se multiplica.
+
+Ninguna de estas estrategias garantiza ganancias:
+- las cuotas cambian;
+- las casas pueden anular cuotas erróneas y limitar cuentas ganadoras.
+
 ## Arquitectura
 
 ```
