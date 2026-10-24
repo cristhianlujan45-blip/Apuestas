@@ -1,0 +1,27 @@
+# Núcleo API
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.16.1
+python-multipart==0.0.32
+SQLAlchemy==2.1.6
+psycopg[binary]==3.3.6
+redis==8.1.0
+httpx==0.28.1
+PyJWT==2.15.1
+bcrypt==5.0.0
+APScheduler==3.11.3
+joblib==1.6.0
+# Ciencia de datos / IA
+numpy==2.5.4
+scipy==1.18.1
+pandas==3.1.0
+scikit-learn==1.9.1
+lightgbm==4.7.0
+xgboost==3.4.1
+catboost==1.2.10
+# torch se instala desde el índice CPU (ver Dockerfile)
+# Asistente (opcional)
+anthropic==2.3.0
+# Pruebas
+pytest==9.1.1

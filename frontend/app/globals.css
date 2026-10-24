@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+}
+
+html, body { background: #0d0d0d; color: var(--text-primary); }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+.num { font-variant-numeric: tabular-nums; }
+.card { @apply rounded-xl border border-line bg-surface-1 p-4; }
+.card-title { @apply text-xs font-semibold uppercase tracking-wider text-ink-muted; }
+.btn { @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-40; }
+.btn-primary { @apply btn bg-accent text-white hover:bg-[#2a78d6]; }
+.btn-ghost { @apply btn border border-line-strong text-ink-2 hover:bg-surface-2; }
+.input { @apply w-full rounded-lg border border-line-strong bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus:border-accent; }
+.label { @apply mb-1 block text-xs font-medium text-ink-2; }
+.tab { @apply rounded-lg px-3 py-1.5 text-sm text-ink-2 hover:bg-surface-2; }
+.tab-active { @apply bg-surface-3 text-ink; }
+table.data { @apply w-full text-sm; }
+table.data th { @apply border-b border-line px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted; }
+table.data td { @apply border-b border-line/60 px-2 py-2 align-top; }
+table.data tr:hover td { @apply bg-surface-2/60; }
+
+input[type="range"].odds-slider { @apply w-full accent-[#3987e5]; height: 28px; }

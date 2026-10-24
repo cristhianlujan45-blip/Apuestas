@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+data/apuestas.db*
+data/raw/
+data/models/
+data/import/*
+!data/import/README.md
+frontend/node_modules/
+frontend/.next/
+frontend/tsconfig.tsbuildinfo
+catboost_info/
+*.log
