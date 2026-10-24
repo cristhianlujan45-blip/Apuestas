@@ -16,7 +16,7 @@ export default function Predictions() {
           <div className="overflow-x-auto"><table className="data min-w-[860px]">
             <thead><tr><th>Registrada</th><th>Evento</th><th>Inicio</th><th className="w-64">Probabilidades</th><th>Resultado</th><th>Versión</th><th>Hash</th></tr></thead>
             <tbody>{data.predictions.map((p: any) => (
-              <tr key={p.id}><td className="num text-ink-2">{bogota(p.created_at)}</td><td><Link className="hover:text-accent" href={`/partido/${p.event_id}`}>{p.event}</Link></td>
+              <tr key={p.id}><td className="num text-ink-2">{bogota(p.created_at)}</td><td><Link className="hover:text-accent" href={`/partido?id=${p.event_id}`}>{p.event}</Link></td>
                 <td className="num text-ink-2">{bogota(p.start_time)}</td><td>{p.probs ? <ProbBar probs={p.probs} /> : "—"}</td>
                 <td className="num">{p.score || STATUS_LABEL[p.status] || p.status}</td><td className="text-[11px] text-ink-muted">{p.model_version}</td><td className="font-mono text-[11px] text-ink-muted">{p.hash}</td></tr>
             ))}</tbody></table></div>

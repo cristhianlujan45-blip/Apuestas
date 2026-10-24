@@ -30,7 +30,7 @@ export default function EventTable({ events, empty }: { events: EventRow[]; empt
                   {e.status === "live" ? <StatusBadge status="critical">EN VIVO {e.minute ?? ""}'</StatusBadge> : bogota(e.start_time)}
                 </td>
                 <td>
-                  <Link href={`/partido/${e.id}`} className="font-medium hover:text-accent">{e.label}</Link>
+                  <Link href={`/partido?id=${e.id}`} className="font-medium hover:text-accent">{e.label}</Link>
                   {e.home_score != null && <span className="ml-2 num text-ink">{e.home_score}-{e.away_score}</span>}
                   <div className="text-[11px] text-ink-muted">{SPORT_LABEL[e.sport] || e.sport}</div>
                 </td>

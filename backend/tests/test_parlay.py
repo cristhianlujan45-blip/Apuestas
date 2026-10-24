@@ -139,3 +139,25 @@ def test_calculator_cop():
     assert r["formatted"]["profit"] == "$90.000"
     assert required_odds(10000, 90000)["required_odds"] == pytest.approx(10.0)
     assert cop(1234567) == "$1.234.567"
+
+
+def test_surebets():
+    from app.services.arbitrage import find_surebets
+
+    base = {"event_id": 1, "event": "A vs B", "captured_at": "x", "stale": False, "player": None, "line": None}
+    q = [
+        {**base, "operator": "betplay", "market": "1x2", "selection": "home", "odds": 2.30},
+        {**base, "operator": "wplay", "market": "1x2", "selection": "draw", "odds": 3.60},
+        {**base, "operator": "rushbet", "market": "1x2", "selection": "away", "odds": 4.20},
+        {**base, "operator": "betplay", "market": "asian_handicap", "selection": "home", "line": -0.5, "odds": 2.10},
+        {**base, "operator": "wplay", "market": "asian_handicap", "selection": "away", "line": 0.5, "odds": 2.02},
+        {**base, "operator": "betplay", "market": "btts", "selection": "yes", "odds": 1.80},
+        {**base, "operator": "wplay", "market": "btts", "selection": "no", "odds": 1.95},
+    ]
+    res = find_surebets(q, stake=100000)
+    markets = {r["market"] for r in res}
+    assert "1x2" in markets and "asian_handicap" in markets  # 1/2.3+1/3.6+1/4.2 = 0.9486 ; 1/2.1+1/2.02 = 0.971
+    assert "btts" not in markets  # 1/1.8 + 1/1.95 = 1.068
+    r = next(x for x in res if x["market"] == "1x2")
+    rets = [leg["return_cop"] for leg in r["legs"]]
+    assert max(rets) - min(rets) <= 2 and min(rets) > 100000

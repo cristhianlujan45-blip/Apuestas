@@ -50,7 +50,7 @@ export default function Dashboard() {
             <Empty>Sin selecciones con valor esperado positivo en las cuotas colombianas disponibles.
               {value.data?.report?.events_with_quotes === 0 && " No hay cuotas de operadores colombianos cargadas."}</Empty>
           ) : (
-            <table className="data">
+            <div className="overflow-x-auto"><table className="data min-w-[560px]">
               <thead><tr><th>Evento</th><th>Selección</th><th>Operador</th><th>Cuota</th><th>Prob.</th><th>Justa</th><th>EV</th></tr></thead>
               <tbody>
                 {value.data.value_bets.slice(0, 6).map((v: any, i: number) => (
@@ -58,7 +58,7 @@ export default function Dashboard() {
                     <td className="num">{pct(v.probability)}</td><td className="num">{odds(v.fair_odds)}</td><td className="num text-good">{signedPct(v.ev)}</td></tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </Card>
       </div>

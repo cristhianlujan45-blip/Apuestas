@@ -36,6 +36,11 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--from", dest="test_from", required=True)
     b.add_argument("--to", dest="test_to")
     b.add_argument("--leagues", default=None)
+    e = sub.add_parser("export-static", help="Exportar JSON estáticos para la app móvil")
+    e.add_argument("--out", default="../site/data")
+    sub.add_parser("pipeline", help="Ingesta + resultados + predicciones + liquidación (ejecución programada)")
+    em = sub.add_parser("ensure-model", help="Entrena si no hay modelo campeón disponible o tiene más de N días")
+    em.add_argument("--max-age-days", type=int, default=7)
     x = sub.add_parser("xt", help="Construir xT/xA con StatsBomb Open Data")
     x.add_argument("--competition", type=int, default=43)
     x.add_argument("--season", type=int, default=106)
@@ -86,6 +91,36 @@ def main(argv: list[str] | None = None) -> int:
                 v.pop("calibration_home", None)
                 v.pop("calibration_away", None)
             _print(out)
+        elif a.cmd == "export-static":
+            from pathlib import Path
+
+            from .export_static import export
+
+            _print(export(db, Path(a.out)))
+        elif a.cmd == "ensure-model":
+            from datetime import datetime, timedelta, timezone
+            from pathlib import Path
+
+            from .services.events import aware
+
+            mv = model_store.champion(db, "football_ensemble")
+            fresh = (mv is not None and mv.artifact_path and Path(mv.artifact_path).exists()
+                     and datetime.now(timezone.utc) - aware(mv.created_at) < timedelta(days=a.max_age_days))
+            if fresh:
+                _print({"model": mv.version, "trained": False})
+            else:
+                r = model_store.train_football(db, promote="force" if mv is None or not Path(mv.artifact_path or "").exists() else "auto")
+                _print({"model": r["version"], "trained": True, "promoted": r["promoted"]})
+        elif a.cmd == "pipeline":
+            from .api.routes import record_upcoming
+
+            res = {"fixtures": ingest.ingest_football_data_fixtures(db),
+                   "odds_co": ingest.ingest_odds_api_net(db),
+                   "api_football": ingest.ingest_api_football(db, days=2)}
+            res["results"] = ingest.update_football_results(db, model_store.football_history(include_colombia=False))
+            res["predictions"] = record_upcoming(db)
+            res["settle"] = history.settle_parlays(db)
+            _print(res)
         elif a.cmd == "xt":
             from .engine.football import xt
 

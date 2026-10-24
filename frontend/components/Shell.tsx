@@ -1,7 +1,7 @@
 "use client";
 import {
   Activity, BarChart3, Bot, BrainCircuit, Building2, Calculator, CalendarDays, Gauge, History, Layers,
-  LineChart, Menu, Radio, Scale, Search, Settings, ShieldCheck, Sparkles, Trophy, X,
+  LineChart, Menu, Radio, Scale, Search, Settings, ShieldCheck, Sparkles, Trophy, X, Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,6 +13,7 @@ const NAV: { href: string; label: string; icon: ReactNode; group: string }[] = [
   { href: "/partidos", label: "Partidos de hoy", icon: <CalendarDays size={16} />, group: "Centro" },
   { href: "/directo", label: "En directo", icon: <Radio size={16} />, group: "Centro" },
   { href: "/proximos", label: "Próximos", icon: <Layers size={16} />, group: "Centro" },
+  { href: "/ventaja", label: "Ventaja · Surebets", icon: <Zap size={16} />, group: "Análisis" },
   { href: "/predicciones", label: "Predicciones", icon: <LineChart size={16} />, group: "Análisis" },
   { href: "/comparador", label: "Comparador de cuotas", icon: <Scale size={16} />, group: "Análisis" },
   { href: "/valor", label: "Detector de valor", icon: <Sparkles size={16} />, group: "Análisis" },
@@ -83,9 +84,27 @@ function StatusStrip() {
   );
 }
 
+function useAndroidBack() {
+  useEffect(() => {
+    let remove: (() => void) | undefined;
+    (async () => {
+      const { Capacitor } = await import("@capacitor/core");
+      if (!Capacitor.isNativePlatform()) return;
+      const { App } = await import("@capacitor/app");
+      const h = await App.addListener("backButton", ({ canGoBack }) => {
+        if (canGoBack && window.location.pathname !== "/") window.history.back();
+        else App.exitApp();
+      });
+      remove = () => h.remove();
+    })();
+    return () => remove?.();
+  }, []);
+}
+
 export default function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
+  useAndroidBack();
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
   const nav = (
     <nav className="space-y-5 p-3">
@@ -124,7 +143,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line bg-page/90 px-4 py-2 backdrop-blur">
+        <header style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }} className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line bg-page/90 px-4 py-2 backdrop-blur">
           <button className="btn-ghost lg:hidden" onClick={() => setOpen(true)} aria-label="Menú"><Menu size={16} /></button>
           <StatusStrip />
           <span className="text-xs text-ink-muted">+18 · Juego responsable</span>

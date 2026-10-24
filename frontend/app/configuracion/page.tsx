@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Card, ErrorBox, PageHeader, StatusBadge } from "@/components/ui";
-import { api, getToken, setToken } from "@/lib/api";
+import { api, getToken, isStatic, setToken } from "@/lib/api";
+import { MARKET_LABEL, MATRIX_MARKETS } from "@/lib/engine";
 import { bogota, cop } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
@@ -137,7 +138,104 @@ function Admin() {
   );
 }
 
+const SELECTIONS: Record<string, string[]> = {
+  "1x2": ["home", "draw", "away"], double_chance: ["1X", "X2", "12"], dnb: ["home", "away"], total_goals: ["over", "under"],
+  btts: ["yes", "no"], correct_score: ["1-0", "2-0", "2-1", "0-0", "1-1", "2-2", "0-1", "0-2", "1-2"], asian_handicap: ["home", "away"],
+  european_handicap: ["home", "draw", "away"], team_total_home: ["over", "under"], team_total_away: ["over", "under"],
+};
+const SEL_ES: Record<string, string> = { home: "Local", away: "Visitante", draw: "Empate", over: "Más de", under: "Menos de", yes: "Sí", no: "No" };
+const NEEDS_LINE = ["total_goals", "asian_handicap", "european_handicap", "team_total_home", "team_total_away"];
+
+function parseCsv(text: string): Record<string, string>[] {
+  const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim());
+  const head = lines[0].split(",").map((h) => h.trim());
+  return lines.slice(1).map((l) => Object.fromEntries(l.split(",").map((v, i) => [head[i], v.trim()])));
+}
+
+function DeviceOdds() {
+  const events = useApi("/events?scope=upcoming&limit=400");
+  const ops = useApi("/operators");
+  const saved = useApi("/odds/manual");
+  const [f, setF] = useState({ event_id: "", operator: "betplay", market: "1x2", selection: "home", line: "", odds: "" });
+  const [msg, setMsg] = useState<any>(null);
+  const evs = (events.data?.events || []).filter((e: any) => e.has_matrix);
+  const submit = async (rows: any[]) => { const r = await api("/odds/manual", { method: "POST", json: rows }); setMsg(r); saved.reload(); };
+  const del = async (id: string) => { await api("/odds/manual/delete", { method: "POST", json: { ids: [id] } }); saved.reload(); };
+  const evLabel = (id: number) => evs.find((e: any) => e.id === id)?.label || (events.data?.events || []).find((e: any) => e.id === id)?.label || id;
+  return (
+    <Card title="Mis cuotas (copie aquí las cuotas que ve en su casa de apuestas)">
+      <p className="mb-3 text-xs text-ink-muted">La app valora cada cuota con el modelo del partido: probabilidad, cuota justa, valor esperado, surebets y combinadas. Se guardan solo en este teléfono.</p>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+        <div className="col-span-2"><label className="label">Partido</label>
+          <select className="input" value={f.event_id} onChange={(e) => setF({ ...f, event_id: e.target.value })}>
+            <option value="">Seleccione…</option>{evs.map((e: any) => <option key={e.id} value={e.id}>{bogota(e.start_time)} · {e.label}</option>)}
+          </select></div>
+        <div><label className="label">Casa</label><select className="input" value={f.operator} onChange={(e) => setF({ ...f, operator: e.target.value })}>
+          {(ops.data?.operators || []).filter((o: any) => o.status === "authorized").map((o: any) => <option key={o.key} value={o.key}>{o.name}</option>)}</select></div>
+        <div><label className="label">Mercado</label><select className="input" value={f.market} onChange={(e) => setF({ ...f, market: e.target.value, selection: SELECTIONS[e.target.value][0] })}>
+          {MATRIX_MARKETS.map((m) => <option key={m} value={m}>{MARKET_LABEL[m]}</option>)}</select></div>
+        <div><label className="label">Selección</label><select className="input" value={f.selection} onChange={(e) => setF({ ...f, selection: e.target.value })}>
+          {SELECTIONS[f.market].map((x) => <option key={x} value={x}>{SEL_ES[x] || x}</option>)}</select></div>
+        {NEEDS_LINE.includes(f.market) && <div><label className="label">Línea</label><input className="input" inputMode="decimal" placeholder="2.5" value={f.line} onChange={(e) => setF({ ...f, line: e.target.value })} /></div>}
+        <div><label className="label">Cuota</label><input className="input" inputMode="decimal" placeholder="1.85" value={f.odds} onChange={(e) => setF({ ...f, odds: e.target.value })} /></div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button className="btn-primary" disabled={!f.event_id || !f.odds} onClick={() => submit([{ ...f, event_id: +f.event_id, odds: +f.odds.replace(",", "."), line: f.line === "" ? null : +f.line.replace(",", ".") }])}>Guardar cuota</button>
+        <label className="btn-ghost cursor-pointer">Importar CSV<input type="file" accept=".csv" className="hidden" onChange={async (e) => { const fl = e.target.files?.[0]; if (fl) submit(parseCsv(await fl.text())); }} /></label>
+        <span className="text-[11px] text-ink-muted">CSV: home,away,operator,market,selection,line,odds</span>
+      </div>
+      {msg && <p className="mt-2 text-xs text-ink-2">Guardadas: {msg.imported}{msg.errors?.length ? ` · errores: ${msg.errors.map((x: any) => `fila ${x.row}: ${x.error}`).join("; ")}` : ""}</p>}
+      {saved.data?.length > 0 && (
+        <table className="data mt-3"><thead><tr><th>Partido</th><th>Casa</th><th>Mercado</th><th>Selección</th><th>Cuota</th><th>Hora</th><th /></tr></thead>
+          <tbody>{saved.data.slice().reverse().map((m: any) => (
+            <tr key={m.id}><td>{evLabel(m.event_id)}</td><td>{m.operator}</td><td>{MARKET_LABEL[m.market] || m.market}</td><td>{SEL_ES[m.selection] || m.selection}{m.line != null ? ` ${m.line}` : ""}</td>
+              <td className="num">{m.odds}</td><td className="num text-ink-muted">{bogota(m.captured_at, false)}</td><td><button className="text-xs text-critical" onClick={() => del(m.id)}>Borrar</button></td></tr>
+          ))}</tbody></table>
+      )}
+      <p className="mt-2 text-[11px] text-ink-muted">Las cuotas con más de 15 minutos se marcan como desactualizadas y no entran en combinadas ni surebets. Vuelva a copiarlas antes de decidir.</p>
+    </Card>
+  );
+}
+
+function StaticSettings() {
+  const status = useApi("/status");
+  const [me, setMe] = useState<any>(null);
+  const [url, setUrl] = useState("");
+  const loadMe = () => { api("/auth/me").then(setMe).catch(() => {}); };
+  useEffect(() => { loadMe(); import("@/lib/staticApi").then((m) => setUrl(m.dataUrl())); }, []);
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Configuración" subtitle="Fuente de datos, sus cuotas, límites de juego responsable y estado de los proveedores." />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card title="Fuente de datos">
+          <p className="text-sm text-ink-2">Datos generados por el pipeline automático: <b>{status.data?.generated_at ? bogota(status.data.generated_at) : "—"}</b></p>
+          <label className="label mt-3">URL de datos</label><input className="input" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <div className="mt-3 flex gap-2">
+            <button className="btn-primary" onClick={async () => { const m = await import("@/lib/staticApi"); m.setDataUrl(url); m.clearCache(); status.reload(); }}>Guardar y actualizar</button>
+            <button className="btn-ghost" onClick={async () => { const m = await import("@/lib/staticApi"); m.clearCache(); location.reload(); }}>Actualizar datos</button>
+          </div>
+        </Card>
+        <Card title="Proveedores del pipeline">
+          {status.data && (
+            <table className="data"><tbody>{Object.entries(status.data.providers).map(([k, p]: any) => (
+              <tr key={k}><td>{k}</td><td className="text-xs text-ink-2">{p.role}</td><td>{p.configured ? <StatusBadge status="good">activo</StatusBadge> : <StatusBadge status="warning">sin clave</StatusBadge>}</td></tr>
+            ))}</tbody></table>
+          )}
+          <p className="mt-2 text-xs text-ink-muted">Las claves se configuran como secretos del repositorio en GitHub (Settings → Secrets → Actions): ODDS_API_NET_KEY, API_FOOTBALL_KEY. Nunca se guardan en el teléfono.</p>
+        </Card>
+      </div>
+      <DeviceOdds />
+      {me && <Limits me={me} reload={loadMe} />}
+    </div>
+  );
+}
+
 export default function Settings() {
+  if (isStatic()) return <StaticSettings />;
+  return <ServerSettings />;
+}
+
+function ServerSettings() {
   const status = useApi("/status");
   const [me, setMe] = useState<any>(null);
   const loadMe = () => { if (!getToken()) { setMe(null); return; } api("/auth/me").then(setMe).catch(() => { setToken(null); setMe(null); }); };

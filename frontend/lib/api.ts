@@ -25,7 +25,18 @@ export function setToken(t: string | null) {
   }
 }
 
+/** Modo app: sin servidor, datos estáticos del pipeline + cálculo en el dispositivo. */
+export const isStatic = () => process.env.NEXT_PUBLIC_MODE === "static";
+
 export async function api<T = any>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
+  if (isStatic()) {
+    const { route } = await import("./staticApi");
+    try {
+      return (await route(path, { method: init.method, json: init.json })) as T;
+    } catch (e: any) {
+      throw new ApiError(e.status || 500, e.detail ?? e.message);
+    }
+  }
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;

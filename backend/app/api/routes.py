@@ -270,6 +270,13 @@ def operators_compare(a: str, b: str, db: Session = Depends(get_db)) -> dict:
     return compare_operators(db, a, b)
 
 
+@router.get("/surebets")
+def surebets(stake: float = 100000.0, db: Session = Depends(get_db)) -> dict:
+    from ..services.arbitrage import surebets_from_db
+
+    return {"surebets": surebets_from_db(db, stake)}
+
+
 @router.get("/odds/formats")
 def odds_formats(odds: float) -> dict:
     return all_formats(odds)

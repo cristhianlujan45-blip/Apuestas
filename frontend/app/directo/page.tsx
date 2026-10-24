@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Card, Empty, PageHeader, ProbBar, StatusBadge } from "@/components/ui";
-import { api, wsUrl } from "@/lib/api";
+import { api, isStatic, wsUrl } from "@/lib/api";
 import { odds } from "@/lib/format";
 
 export default function Live() {
@@ -19,6 +19,7 @@ export default function Live() {
       load();
       poll = setInterval(load, 20000);
     };
+    if (isStatic()) { startPolling(); return () => { if (poll) clearInterval(poll); }; }
     try {
       const ws = new WebSocket(wsUrl());
       wsRef.current = ws;
@@ -47,7 +48,7 @@ export default function Live() {
     <div>
       <PageHeader title="Partidos en directo"
         subtitle="Probabilidades actualizadas con marcador, minuto, expulsiones y rendimiento observado (xG o tiros al arco)."
-        right={<StatusBadge status={mode === "ws" ? "good" : "info"}>{mode === "ws" ? "WebSocket conectado" : mode === "poll" ? "Actualización cada 20 s" : "Conectando…"}</StatusBadge>} />
+        right={<StatusBadge status={mode === "ws" ? "good" : "info"}>{mode === "ws" ? "WebSocket conectado" : mode === "poll" ? (isStatic() ? "Datos del último ciclo del pipeline" : "Actualización cada 20 s") : "Conectando…"}</StatusBadge>} />
       {!events.length ? (
         <Empty>No hay partidos en directo en este momento. Los datos en vivo requieren API_FOOTBALL_KEY (estadísticas) y ODDS_API_NET_KEY (cuotas en vivo).</Empty>
       ) : (
@@ -56,7 +57,7 @@ export default function Live() {
             const lp = e.live_model?.probs || e.live?.probs;
             return (
               <Card key={e.id} title={<span>{e.competition || e.sport}</span>} right={<StatusBadge status="critical">{e.minute ?? "?"}'</StatusBadge>}>
-                <Link href={`/partido/${e.id}`} className="flex items-center justify-between text-lg font-semibold hover:text-accent">
+                <Link href={`/partido?id=${e.id}`} className="flex items-center justify-between text-lg font-semibold hover:text-accent">
                   <span>{e.home}</span><span className="num">{e.home_score ?? 0} - {e.away_score ?? 0}</span><span>{e.away}</span>
                 </Link>
                 {lp ? <div className="mt-3"><div className="mb-1 text-xs text-ink-muted">Probabilidad en vivo</div><ProbBar probs={lp} /></div>

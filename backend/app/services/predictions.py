@@ -43,6 +43,7 @@ class EventModel:
     sufficient: bool
     model_version: str
     reason: str | None = None
+    matrix: np.ndarray | None = None  # matriz de marcadores (fútbol), filas = goles local
 
 
 def _football_names(engine: FootballEngine, ev: Event) -> tuple[str | None, str, str]:
@@ -106,13 +107,14 @@ def model_event(db: Session, ev: Event, n_draws: int = 120) -> EventModel:
             lam, mu = pred.exp_goals
             out, info = live_outcomes(lam, mu, live_state)
             summary["live"] = info
+            shape = (int(out["home"].max()) + 1, int(out["away"].max()) + 1)
             return EventModel(ev, ev.sport, out, summary, [], pred.data_quality.get("sufficient", False),
-                              pred.model_version)
+                              pred.model_version, matrix=out.weights.reshape(shape))
         has_counts = bool(pred.count_params)
         out = pred.sample_outcomes(20000) if has_counts else pred.grid_outcomes()
         draws = [matrix_outcomes(m) for m in pred.draws_matrices]
         return EventModel(ev, ev.sport, out, summary, draws, pred.data_quality.get("sufficient", False),
-                          pred.model_version)
+                          pred.model_version, matrix=pred.matrix)
     sm = model_store.sport_model(db, ev.sport)
     if sm is None:
         return EventModel(ev, ev.sport, None, {}, [], False, "-",

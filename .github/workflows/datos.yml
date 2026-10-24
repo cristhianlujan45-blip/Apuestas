@@ -1,0 +1,90 @@
+name: Datos (pipeline programado)
+
+# Ingiere partidos y cuotas, ejecuta los modelos y publica los JSON que usa la app
+# en la rama `datos`. Las claves opcionales se configuran como secretos del repositorio:
+# ODDS_API_NET_KEY (cuotas de casas colombianas), API_FOOTBALL_KEY, API_BASKETBALL_KEY.
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+    inputs:
+      retrain:
+        description: "Forzar reentrenamiento del modelo"
+        type: boolean
+        default: false
+
+concurrency:
+  group: datos
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ODDS_API_NET_KEY: ${{ secrets.ODDS_API_NET_KEY }}
+      API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+      API_BASKETBALL_KEY: ${{ secrets.API_BASKETBALL_KEY }}
+      JWT_SECRET: pipeline-sin-sesiones-de-usuario
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Recuperar el estado anterior (base de datos con el historial de predicciones)
+        run: |
+          mkdir -p data
+          if git fetch -q origin datos --depth=1; then
+            git show FETCH_HEAD:state/apuestas.db > data/apuestas.db 2>/dev/null || rm -f data/apuestas.db
+          fi
+          ls -la data
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r backend/requirements.txt
+          pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Caché de modelos y datos crudos
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/models
+            data/raw
+          key: modelos-${{ github.run_id }}
+          restore-keys: modelos-
+
+      - name: Modelo (entrena si falta o tiene más de 7 días)
+        working-directory: backend
+        run: |
+          python -m app.cli init
+          if [ "${{ inputs.retrain }}" = "true" ]; then python -m app.cli train-football --promote force; else python -m app.cli ensure-model; fi
+
+      - name: Ingesta, predicciones y liquidación
+        working-directory: backend
+        run: python -m app.cli pipeline
+
+      - name: xT (StatsBomb)
+        working-directory: backend
+        run: test -f ../data/models/xt_43_106.json || python -m app.cli xt --matches 20 || true
+
+      - name: Exportar JSON para la app
+        working-directory: backend
+        run: python -m app.cli export-static --out ../publish/data
+
+      - name: Publicar en la rama datos (un solo commit, sin crecer el repositorio)
+        run: |
+          mkdir -p publish/state && cp data/apuestas.db publish/state/apuestas.db
+          cd publish
+          git init -q -b datos
+          git config user.name "apuestas-pipeline"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Datos $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" datos:datos

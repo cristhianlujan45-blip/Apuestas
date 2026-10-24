@@ -1,5 +1,5 @@
 "use client";
-import { use, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DistributionChart, OddsHistoryChart } from "@/components/charts";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, ProbBar, StatusBadge } from "@/components/ui";
 import { bogota, num, odds, pct, signedPct, STATUS_LABEL } from "@/lib/format";
@@ -12,8 +12,7 @@ const COMPONENT_LABEL: Record<string, string> = {
   torch_mlp: "Red neuronal (PyTorch)", market: "Mercado internacional sin margen",
 };
 
-export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function EventView({ id }: { id: string }) {
   const { data, error, loading } = useApi(`/events/${id}`, [id], 60000);
   const sim = useApi(`/events/${id}/simulate`, [id]);
   const [selKey, setSelKey] = useState<string | null>(null);

@@ -1,0 +1,53 @@
+name: App Android (APK)
+
+on:
+  push:
+    paths: ["frontend/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm ci --no-audit --no-fund
+      - name: Exportar la app (modo estático)
+        run: npm run build:mobile
+      - name: Sincronizar Capacitor
+        run: npx cap sync android
+      - name: Compilar APK
+        working-directory: frontend/android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Renombrar APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/apuestas-intel-co.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apuestas-intel-co-apk
+          path: frontend/android/app/build/outputs/apk/debug/apuestas-intel-co.apk
+      - name: Publicar en Releases (app-latest)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-latest
+          name: Apuestas Intel CO — APK
+          prerelease: false
+          body: |
+            APK de Android generado automáticamente desde la rama ${{ github.ref_name }} (commit ${{ github.sha }}).
+            Instalación: descargue `apuestas-intel-co.apk`, ábralo en el teléfono y permita "instalar apps de origen desconocido".
+          files: frontend/android/app/build/outputs/apk/debug/apuestas-intel-co.apk

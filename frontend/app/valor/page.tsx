@@ -22,7 +22,7 @@ export default function Value() {
           <div className="overflow-x-auto"><table className="data min-w-[900px]">
             <thead><tr><th>Evento</th><th>Selección</th><th>Operador</th><th>Cuota</th><th>Prob. implícita</th><th>Prob. modelo</th><th>Cuota justa</th><th>EV</th><th>Kelly ¼</th><th>Consulta</th></tr></thead>
             <tbody>{data.value_bets.map((v: any, i: number) => (
-              <tr key={i}><td><Link className="hover:text-accent" href={`/partido/${v.event_id}`}>{v.event}</Link><div className="text-[11px] text-ink-muted">{bogota(v.start_time)}</div></td>
+              <tr key={i}><td><Link className="hover:text-accent" href={`/partido?id=${v.event_id}`}>{v.event}</Link><div className="text-[11px] text-ink-muted">{bogota(v.start_time)}</div></td>
                 <td>{v.selection}</td><td>{v.operator}</td><td className="num">{odds(v.odds)}</td><td className="num">{pct(v.implied_probability)}</td>
                 <td className="num">{pct(v.probability)}{v.probability_low != null && <span className="text-ink-muted"> ({pct(v.probability_low, 0)}–{pct(v.probability_high, 0)})</span>}</td>
                 <td className="num">{odds(v.fair_odds)}</td><td className="num text-good">{signedPct(v.ev)}</td><td className="num">{pct(v.kelly_quarter)}</td><td className="num text-ink-muted">{bogota(v.captured_at, false)}</td></tr>

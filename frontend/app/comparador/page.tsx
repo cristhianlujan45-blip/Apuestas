@@ -42,7 +42,7 @@ export default function Comparator() {
           <table className="data"><thead><tr><th>Hora</th><th>Evento</th><th>Competición</th><th>Casas</th><th /></tr></thead>
             <tbody>{withQuotes.map((e: any) => (
               <tr key={e.id}><td className="num">{bogota(e.start_time)}</td><td>{e.label}</td><td>{e.competition}</td><td className="num">{e.colombian_operators}</td>
-                <td><Link className="text-accent" href={`/partido/${e.id}`}>Comparar mercados →</Link></td></tr>
+                <td><Link className="text-accent" href={`/partido?id=${e.id}`}>Comparar mercados →</Link></td></tr>
             ))}</tbody></table>
         )}
       </Card>

@@ -13,3 +13,4 @@ frontend/.next/
 frontend/tsconfig.tsbuildinfo
 catboost_info/
 *.log
+frontend/out/
