@@ -26,7 +26,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      # Los runners ubuntu-latest ya incluyen el SDK de Android (ANDROID_HOME)
       - run: npm ci --no-audit --no-fund
       - name: Exportar la app (modo estático)
         run: npm run build:mobile
