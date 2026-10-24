@@ -162,7 +162,6 @@ def walk_forward_football(history: pd.DataFrame, test_from: str, test_to: str | 
 
     y = table["result"].to_numpy()
     per_model: dict[str, dict] = {}
-    common = test_mask.to_numpy().copy()
     for name, p in comp.items():
         ok = test_mask.to_numpy() & ~np.isnan(p).any(axis=1)
         if ok.sum() < 50:
@@ -171,44 +170,82 @@ def walk_forward_football(history: pd.DataFrame, test_from: str, test_to: str | 
         s["coverage"] = float(ok.sum() / test_mask.sum())
         per_model[name] = s
 
-    # Conjunto común donde todos los modelos con cobertura >= 90 % tienen predicción
-    core = [k for k, v in per_model.items() if v["coverage"] >= 0.9]
-    for k in core:
-        common &= ~np.isnan(comp[k]).any(axis=1)
-    cidx = np.where(common)[0]
+    # --- Ensembles por apilamiento --------------------------------------------
+    # Dos conjuntos de evaluación:
+    #  * "sin mercado": modelos propios con cobertura >= 90 %, filas donde todos predicen;
+    #  * "con mercado": los anteriores + cuotas de referencia (y modelos *_mkt), solo en
+    #    filas que tienen cuotas. Las comparaciones se hacen SIEMPRE sobre el mismo
+    #    conjunto de partidos (comparación pareada).
+    is_mkt = lambda k: k == "market" or k.endswith("_mkt")  # noqa: E731
+    test_arr = test_mask.to_numpy()
+    nm_models = [k for k, v in per_model.items() if v["coverage"] >= 0.9 and not is_mkt(k)]
+    mk_models = nm_models + [k for k in per_model if is_mkt(k)]
+
+    def rows_with(models: list[str]) -> np.ndarray:
+        ok = test_arr.copy()
+        for k in models:
+            ok &= ~np.isnan(comp[k]).any(axis=1)
+        return np.where(ok)[0]
+
+    def stack(models: list[str], idx: np.ndarray) -> tuple[np.ndarray, dict[str, float]]:
+        """Predicción fuera de muestra por validación cruzada temporal de 2 bloques + pesos finales."""
+        half = len(idx) // 2
+        a_idx, b_idx = idx[:half], idx[half:]
+        wa = fit_stacking_weights([comp[k][a_idx] for k in models], y[a_idx])
+        wb = fit_stacking_weights([comp[k][b_idx] for k in models], y[b_idx])
+        out = np.full((n, 3), np.nan)
+        out[b_idx] = combine([comp[k][b_idx] for k in models], wa)
+        out[a_idx] = combine([comp[k][a_idx] for k in models], wb)
+        w_all = fit_stacking_weights([comp[k][idx] for k in models], y[idx])
+        return out, {k: float(w) for k, w in zip(models, w_all)}
+
     ensemble: dict = {}
     weights: dict[str, float] = {}
-    if len(cidx) >= 100 and core:
-        half = len(cidx) // 2
-        a_idx, b_idx = cidx[:half], cidx[half:]
-        wa = fit_stacking_weights([comp[k][a_idx] for k in core], y[a_idx])
-        wb = fit_stacking_weights([comp[k][b_idx] for k in core], y[b_idx])
-        pa = combine([comp[k][b_idx] for k in core], wa)   # pesos de A evaluados en B
-        pb = combine([comp[k][a_idx] for k in core], wb)   # pesos de B evaluados en A
-        cross = np.zeros((n, 3))
-        cross[b_idx], cross[a_idx] = pa, pb
-        ensemble = M.multiclass_summary(cross[cidx], y[cidx])
-        ensemble["method"] = "stacking convexo con validación cruzada temporal 2 bloques"
-        w_all = fit_stacking_weights([comp[k][cidx] for k in core], y[cidx])
-        weights = {k: float(w) for k, w in zip(core, w_all)}
-        # Pesos alternativos para partidos sin cuotas de referencia
-        core_nm = [k for k in core if k != "market" and not k.endswith("_mkt")]
-        if core_nm:
-            w_nm = fit_stacking_weights([comp[k][cidx] for k in core_nm], y[cidx])
-            ensemble["weights_no_market"] = {k: float(w) for k, w in zip(core_nm, w_nm)}
-            ens_nm = combine([comp[k][cidx] for k in core_nm], w_nm)
-            ensemble["log_loss_no_market_in_sample"] = M.log_loss(ens_nm, y[cidx])
-        comp["ensemble"] = np.full((n, 3), np.nan)
-        comp["ensemble"][cidx] = cross[cidx]
-        # Métricas de cada modelo en el mismo conjunto común (comparación justa)
-        for k in core:
-            per_model[k]["common_log_loss"] = M.log_loss(comp[k][cidx], y[cidx])
+    nm_idx = rows_with(nm_models) if nm_models else np.array([], int)
+    mk_idx = rows_with(mk_models) if len(mk_models) > len(nm_models) else np.array([], int)
+    if len(nm_idx) >= 100:
+        ens_nm, w_nm = stack(nm_models, nm_idx)
+        ens = ens_nm.copy()
+        ensemble["weights_no_market"] = w_nm
+        if len(mk_idx) >= 100:
+            ens_mk, w_mk = stack(mk_models, mk_idx)
+            ens[mk_idx] = ens_mk[mk_idx]  # con cuotas de referencia se usa el ensemble con mercado
+            weights = w_mk
+        else:
+            weights = w_nm
+        comp["ensemble"] = ens
+        ensemble.update(M.multiclass_summary(ens[nm_idx], y[nm_idx]))
+        ensemble["method"] = "stacking convexo, validación cruzada temporal de 2 bloques; ensemble con mercado donde hay cuotas"
+        ensemble["n_no_market_set"] = int(len(nm_idx))
+        ensemble["n_market_set"] = int(len(mk_idx))
+        for k in nm_models:
+            per_model[k]["common_log_loss"] = M.log_loss(comp[k][nm_idx], y[nm_idx])
         ensemble["common_log_loss"] = ensemble["log_loss"]
+        ensemble["no_market_log_loss"] = M.log_loss(ens_nm[nm_idx], y[nm_idx])
+        if len(mk_idx) >= 100:
+            ensemble["market_subset"] = {
+                "n": int(len(mk_idx)),
+                "ensemble_log_loss": M.log_loss(ens[mk_idx], y[mk_idx]),
+                "ensemble_no_market_log_loss": M.log_loss(ens_nm[mk_idx], y[mk_idx]),
+                "models": {k: M.log_loss(comp[k][mk_idx], y[mk_idx]) for k in mk_models},
+            }
+            for k in mk_models:
+                per_model[k]["market_subset_log_loss"] = ensemble["market_subset"]["models"][k]
+                if is_mkt(k):
+                    per_model[k]["common_log_loss"] = per_model[k]["market_subset_log_loss"]
 
-    ranking = {k: v.get("common_log_loss", v["log_loss"]) for k, v in per_model.items()}
-    if ensemble:
-        ranking["ensemble"] = ensemble["log_loss"]
+    # Campeón: comparación pareada en el conjunto con mercado (si existe), si no en el común
+    if ensemble.get("market_subset"):
+        ranking = {**ensemble["market_subset"]["models"], "ensemble": ensemble["market_subset"]["ensemble_log_loss"]}
+        champion_scope = "partidos con cuotas de referencia"
+    else:
+        ranking = {k: v.get("common_log_loss", v["log_loss"]) for k, v in per_model.items() if not is_mkt(k)}
+        if ensemble:
+            ranking["ensemble"] = ensemble["log_loss"]
+        champion_scope = "conjunto común"
     champion = min(ranking, key=ranking.get)
+    ensemble["champion_scope"] = champion_scope
+    ensemble["champion_ranking"] = dict(sorted(ranking.items(), key=lambda kv: kv[1]))
 
     # --- Totales de goles -------------------------------------------------
     tot_ok = test_mask.to_numpy() & ~np.isnan(exp_total)

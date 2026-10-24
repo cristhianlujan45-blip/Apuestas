@@ -2,10 +2,10 @@ export const cop = (v: number | null | undefined) =>
   v == null || Number.isNaN(v) ? "—" : `$${Math.round(v).toLocaleString("es-CO")}`;
 
 export const pct = (v: number | null | undefined, d = 1) =>
-  v == null || Number.isNaN(v) ? "—" : `${(v * 100).toFixed(d)} %`;
+  v == null || Number.isNaN(v) ? "—" : `${(v * 100).toFixed(d)}\u00a0%`;
 
 export const signedPct = (v: number | null | undefined, d = 1) =>
-  v == null || Number.isNaN(v) ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)} %`;
+  v == null || Number.isNaN(v) ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}\u00a0%`;
 
 export const odds = (v: number | null | undefined) => (v == null ? "—" : v.toFixed(2));
 
@@ -37,3 +37,8 @@ export const SPORT_LABEL: Record<string, string> = {
 
 // Paleta categórica validada (modo oscuro), en orden fijo — nunca cíclica.
 export const SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+
+export const STATUS_LABEL: Record<string, string> = {
+  scheduled: "programado", live: "en vivo", finished: "finalizado", postponed: "aplazado", cancelled: "cancelado",
+  open: "abierta", won: "ganada", lost: "perdida", void: "nula", partial_void: "parcialmente nula", won_partial: "ganada parcial",
+};

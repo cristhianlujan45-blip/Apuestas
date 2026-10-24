@@ -18,9 +18,8 @@ export default function Dashboard() {
   const [target, setTarget] = useState(5);
 
   const run = models.data?.validation_runs?.[0];
-  const perModel = run?.metrics?.per_model || {};
-  const bars = Object.entries(perModel).map(([k, v]: any) => ({ name: k, value: v.common_log_loss ?? v.log_loss, champion: k === run?.metrics?.champion }));
-  if (run?.metrics?.ensemble?.log_loss) bars.push({ name: "ensemble", value: run.metrics.ensemble.log_loss, champion: run.metrics.champion === "ensemble" });
+  const ranking = run?.metrics?.ensemble?.champion_ranking || {};
+  const bars = Object.entries(ranking).map(([k, v]: any) => ({ name: k, value: v, champion: k === run?.metrics?.champion }));
 
   return (
     <div className="space-y-5">
@@ -69,7 +68,7 @@ export default function Dashboard() {
           {today.loading ? <Loading /> : today.error ? <ErrorBox error={today.error} /> : <EventTable events={today.data?.events || []} empty="No hay partidos hoy en la base de datos. Ejecute la ingesta desde Configuración." />}
         </Card>
         <div className="space-y-4">
-          <Card title="Comparación de modelos (log loss, menor es mejor)">
+          <Card title="Comparación pareada de modelos (log loss, menor es mejor)">
             {bars.length ? <ModelBarChart rows={bars} /> : <Empty>Sin validación todavía.</Empty>}
             {run && <p className="mt-2 text-xs text-ink-muted">Campeón: <b className="text-ink-2">{run.metrics.champion}</b>. Validación temporal walk-forward; las cuotas internacionales sin margen suelen ser el predictor más difícil de superar.</p>}
           </Card>

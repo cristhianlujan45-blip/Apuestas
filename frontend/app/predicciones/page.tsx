@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { Card, Empty, ErrorBox, Loading, PageHeader, ProbBar, StatusBadge } from "@/components/ui";
-import { bogota } from "@/lib/format";
+import { bogota, STATUS_LABEL } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
 export default function Predictions() {
@@ -18,7 +18,7 @@ export default function Predictions() {
             <tbody>{data.predictions.map((p: any) => (
               <tr key={p.id}><td className="num text-ink-2">{bogota(p.created_at)}</td><td><Link className="hover:text-accent" href={`/partido/${p.event_id}`}>{p.event}</Link></td>
                 <td className="num text-ink-2">{bogota(p.start_time)}</td><td>{p.probs ? <ProbBar probs={p.probs} /> : "—"}</td>
-                <td className="num">{p.score || p.status}</td><td className="text-[11px] text-ink-muted">{p.model_version}</td><td className="font-mono text-[11px] text-ink-muted">{p.hash}</td></tr>
+                <td className="num">{p.score || STATUS_LABEL[p.status] || p.status}</td><td className="text-[11px] text-ink-muted">{p.model_version}</td><td className="font-mono text-[11px] text-ink-muted">{p.hash}</td></tr>
             ))}</tbody></table></div>
         )}
       </Card>

@@ -2,7 +2,7 @@
 import { use, useMemo, useState } from "react";
 import { DistributionChart, OddsHistoryChart } from "@/components/charts";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, ProbBar, StatusBadge } from "@/components/ui";
-import { ago, bogota, num, odds, pct, signedPct } from "@/lib/format";
+import { bogota, num, odds, pct, signedPct, STATUS_LABEL } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
 const COMPONENT_LABEL: Record<string, string> = {
@@ -30,7 +30,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   return (
     <div className="space-y-4">
       <PageHeader title={ev.label}
-        subtitle={<>{ev.competition || ev.sport} · {bogota(ev.start_time)} (hora Colombia) · {ev.status === "live" ? `EN VIVO ${ev.minute ?? ""}'` : ev.status}
+        subtitle={<>{ev.competition || ev.sport} · {bogota(ev.start_time)} (hora Colombia) · {ev.status === "live" ? `EN VIVO ${ev.minute ?? ""}'` : STATUS_LABEL[ev.status] || ev.status}
           {ev.home_score != null && <b className="ml-2 text-ink">{ev.home_score}-{ev.away_score}</b>}</>}
         right={data.data_sufficient ? <StatusBadge status="good">Datos suficientes</StatusBadge> : <StatusBadge status="warning">Datos limitados</StatusBadge>} />
       {data.model_note && <Empty>{data.model_note}</Empty>}
@@ -87,7 +87,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       <Card title="Mercados: modelo vs operadores colombianos" right={
-        <select className="input w-auto" value={market} onChange={(e) => setMarket(e.target.value)}>
+        <select className="input max-w-xs" value={market} onChange={(e) => setMarket(e.target.value)}>
           <option value="">Todos los mercados</option>{markets.map((x) => <option key={x}>{x}</option>)}
         </select>}>
         {!rows.length ? <Empty>No hay cuotas de operadores para este evento. Configure el feed de cuotas o cárguelas manualmente en Configuración.</Empty> : (
@@ -128,7 +128,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           {data.operators_with_quotes?.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{data.operators_with_quotes.map((o: string) => <Badge key={o}>{o}</Badge>)}</div>}
         </Card>
       </div>
-      <p className="text-xs text-ink-muted">Actualizado {ago(new Date().toISOString())}.</p>
     </div>
   );
 }

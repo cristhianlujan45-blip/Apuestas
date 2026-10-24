@@ -22,7 +22,7 @@ export default function Sports() {
     <div className="space-y-4">
       <PageHeader title="Análisis por deporte" subtitle="Modelos especializados por deporte y mercado. Las fuerzas se estiman con datos históricos reales y ponderación temporal." />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">{SPORT_MODELS.map((s) => <Card key={s.sport} title={s.sport}><p className="text-xs text-ink-2">{s.models}</p></Card>)}</div>
-      <Card title="Fútbol · fuerzas Dixon-Coles" right={r.data && <select className="input w-auto" value={group} onChange={(e) => setGroup(e.target.value)}>{r.data.groups.map((g: string) => <option key={g} value={g}>{GROUP_LABEL[g] || g}</option>)}</select>}>
+      <Card title="Fútbol · fuerzas Dixon-Coles" right={r.data && <select className="input max-w-xs" value={group} onChange={(e) => setGroup(e.target.value)}>{r.data.groups.map((g: string) => <option key={g} value={g}>{GROUP_LABEL[g] || g}</option>)}</select>}>
         {r.loading ? <Loading /> : r.error ? <ErrorBox error={r.error} /> : (
           <>
             <p className="mb-2 text-xs text-ink-muted num">Ventaja local (log): {num(r.data.home_advantage, 3)} · ρ Dixon-Coles: {num(r.data.rho, 3)} · {r.data.n_matches} partidos · {r.data.version}</p>

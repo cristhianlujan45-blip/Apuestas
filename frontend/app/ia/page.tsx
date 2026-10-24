@@ -25,24 +25,25 @@ export default function AI() {
           <div className="grid gap-3 md:grid-cols-4">
             <Card title="Periodo validado"><div className="text-sm num">{bogota(run.from)} → {bogota(run.to)}</div><div className="text-xs text-ink-muted">{run.n} partidos · {run.scope}</div></Card>
             <Card title="Campeón"><div className="text-lg font-semibold">{LABEL[m.champion] || m.champion}</div></Card>
-            <Card title="Ensemble"><div className="text-sm num">Log loss {num(m.ensemble?.log_loss, 4)} · RPS {num(m.ensemble?.rps, 4)}</div><div className="text-xs text-ink-muted num">Brier {num(m.ensemble?.brier, 4)} · acierto {pct(m.ensemble?.accuracy)}</div></Card>
+            <Card title="Ensemble (todas las ligas)"><div className="text-sm num">Log loss {num(m.ensemble?.log_loss, 4)} · RPS {num(m.ensemble?.rps, 4)}</div><div className="text-xs text-ink-muted num">Brier {num(m.ensemble?.brier, 4)} · acierto {pct(m.ensemble?.accuracy)}</div></Card>
             <Card title="Degradación">{m.roi?.degradation ? (m.roi.degradation.alarm ? <StatusBadge status="warning">Alarma (z={num(m.roi.degradation.z, 1)})</StatusBadge> : <StatusBadge status="good">Estable</StatusBadge>) : "—"}</Card>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card title="Log loss fuera de muestra (conjunto común)">
-              <ModelBarChart rows={[...Object.entries(m.per_model).map(([k, v]: any) => ({ name: LABEL[k] || k, value: v.common_log_loss ?? v.log_loss, champion: k === m.champion })),
-                ...(m.ensemble?.log_loss ? [{ name: "Ensemble", value: m.ensemble.log_loss, champion: m.champion === "ensemble" }] : [])]} />
+            <Card title={`Log loss pareado · ${m.ensemble?.champion_scope || "conjunto común"}${m.ensemble?.market_subset ? ` (${m.ensemble.market_subset.n} partidos)` : ""}`}>
+              <ModelBarChart rows={Object.entries(m.ensemble?.champion_ranking || {}).map(([k, v]: any) => ({ name: LABEL[k] || k, value: v, champion: k === m.champion }))} />
+              <p className="mt-2 text-xs text-ink-muted">Todos los modelos se comparan sobre exactamente los mismos partidos. Menor es mejor.</p>
             </Card>
             <Card title="Calibración del ensemble (victoria local)">
-              {m.ensemble?.calibration_home ? <CalibrationChart rows={m.ensemble.calibration_home} /> : <Empty>—</Empty>}
+              {m.ensemble?.calibration_home ? <CalibrationChart rows={m.ensemble.calibration_home.filter((r: any) => r.n >= 20)} /> : <Empty>—</Empty>}
+              <p className="mt-1 text-xs text-ink-muted">Tramos con al menos 20 partidos. Diagonal = calibración perfecta.</p>
             </Card>
           </div>
           <Card title="Métricas por modelo">
             <div className="overflow-x-auto"><table className="data min-w-[820px]">
-              <thead><tr><th>Modelo</th><th>Log loss</th><th>Brier</th><th>RPS</th><th>Acierto</th><th>ECE local</th><th>Cobertura</th><th>Peso ensemble</th></tr></thead>
+              <thead><tr><th>Modelo</th><th>Log loss</th><th>Brier</th><th>RPS</th><th>Acierto</th><th>ECE local</th><th>Cobertura</th><th>Log loss común</th><th>Peso ensemble</th></tr></thead>
               <tbody>{Object.entries(m.per_model).map(([k, v]: any) => (
                 <tr key={k}><td>{LABEL[k] || k}</td><td className="num">{num(v.log_loss, 4)}</td><td className="num">{num(v.brier, 4)}</td><td className="num">{num(v.rps, 4)}</td>
-                  <td className="num">{pct(v.accuracy)}</td><td className="num">{num(v.ece_home, 3)}</td><td className="num">{pct(v.coverage, 0)}</td><td className="num">{m.weights?.[k] != null ? pct(m.weights[k]) : "—"}</td></tr>
+                  <td className="num">{pct(v.accuracy)}</td><td className="num">{num(v.ece_home, 3)}</td><td className="num">{pct(v.coverage, 0)}</td><td className="num">{num(v.common_log_loss, 4)}</td><td className="num">{m.weights?.[k] != null ? pct(m.weights[k]) : "—"}</td></tr>
               ))}</tbody></table></div>
             {m.ensemble?.weights_no_market && <p className="mt-2 text-xs text-ink-muted">Pesos sin cuotas de referencia: {Object.entries(m.ensemble.weights_no_market).filter(([, w]: any) => w > 0.005).map(([k, w]: any) => `${LABEL[k] || k} ${pct(w, 0)}`).join(" · ")}</p>}
           </Card>

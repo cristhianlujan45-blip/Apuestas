@@ -151,18 +151,21 @@ def page_hinkley(losses: np.ndarray, delta: float = 0.005, threshold: float = 0.
 def degradation_check(losses: np.ndarray, window: int = 200, z_threshold: float = 3.0) -> dict:
     """Compara la pérdida media reciente con la de referencia (inicio de la serie).
 
-    Combina un test z de la ventana reciente con Page-Hinkley calibrado a la
-    escala de la pérdida (la log loss por partido es muy ruidosa).
+    Test z de la ventana reciente frente a la referencia, más Page-Hinkley
+    sobre las últimas ``2·window`` observaciones con un umbral escalado a la
+    variabilidad de la log loss por partido (muy ruidosa).
     """
     losses = np.asarray(losses, float)
     if len(losses) < 2 * window:
         return {"alarm": False, "reason": "serie demasiado corta", "n": int(len(losses))}
     ref, recent = losses[:-window], losses[-window:]
-    se = ref.std(ddof=1) / math.sqrt(window)
+    sd = ref.std(ddof=1)
+    se = sd / math.sqrt(window)
     z = float((recent.mean() - ref.mean()) / se) if se > 0 else 0.0
-    ph = page_hinkley(losses - ref.mean(), delta=0.02, threshold=15 * ref.std(ddof=1))
-    return {"alarm": bool(z > z_threshold or ph["alarm"]), "z": z, "reference_mean": float(ref.mean()),
-            "recent_mean": float(recent.mean()), "window": window, "page_hinkley": ph, "n": int(len(losses))}
+    ph = page_hinkley(losses[-2 * window:], delta=0.01, threshold=3 * sd * math.sqrt(window))
+    alarm = bool(z > z_threshold or (ph["alarm"] and z > 1.0))
+    return {"alarm": alarm, "z": z, "reference_mean": float(ref.mean()), "recent_mean": float(recent.mean()),
+            "window": window, "page_hinkley": ph, "n": int(len(losses))}
 
 
 def rolling_metric(losses: np.ndarray, window: int = 50) -> list[float]:

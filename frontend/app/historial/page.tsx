@@ -1,6 +1,6 @@
 "use client";
 import { Card, Empty, ErrorBox, Loading, PageHeader, StatusBadge } from "@/components/ui";
-import { bogota, odds, pct, signedPct } from "@/lib/format";
+import { bogota, odds, pct, signedPct, STATUS_LABEL } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
 const ST: Record<string, any> = { won: "good", lost: "critical", open: "info", void: "info", partial_void: "warning", won_partial: "warning" };
@@ -22,7 +22,7 @@ export default function HistoryPage() {
               <tr key={p.id}><td className="num text-ink-2">{bogota(p.created_at)}</td><td>{p.label} · {p.mode}</td><td>{p.operator}</td>
                 <td className="text-xs">{p.legs.map((l: any) => `${l.event}: ${l.selection} @ ${odds(l.odds)}`).join(" | ")}</td>
                 <td className="num">{odds(p.total_odds)}</td><td className="num">{pct(p.joint_probability)}</td><td className="num">{signedPct(p.ev)}</td>
-                <td><StatusBadge status={ST[p.status] || "info"}>{p.status}</StatusBadge></td></tr>
+                <td><StatusBadge status={ST[p.status] || "info"}>{STATUS_LABEL[p.status] || p.status}</StatusBadge></td></tr>
             ))}</tbody></table></div>
         )}
       </Card>

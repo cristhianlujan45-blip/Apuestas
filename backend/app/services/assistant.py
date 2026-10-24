@@ -294,6 +294,42 @@ def _render_without_llm(name: str, result: dict) -> str:
             ptxt = f" · L {p['home']:.0%} / E {p.get('draw', 0):.0%} / V {p['away']:.0%}" if p else ""
             lines.append(f"- {e['start_time'][11:16]} UTC {e['label']} ({e.get('competition') or e['sport']}){ptxt}")
         return "\n".join(lines)
+    if name == "ultimos_partidos":
+        s = result["summary"]
+        lines = [f"**{result['team']}** — últimos {len(result['matches'])} partidos: {s['wins']}G {s['draws']}E {s['losses']}P"]
+        for m in reversed(result["matches"]):
+            sot = f" · tiros al arco {int(m['shots_on_target'])}" if pd.notna(m.get("shots_on_target")) else ""
+            lines.append(f"- {m['date']} {m['venue']} vs {m['opponent']}: {m['score']} ({m['result']}){sot}")
+        lines.append(f"_Fuente: {result['source']}_")
+        return "\n".join(lines)
+    if name == "comparar_operadores":
+        r = result
+        if not r["common_selections"]:
+            return f"No hay selecciones con cuota de **{r['operator_a']}** y **{r['operator_b']}** a la vez en la base de datos."
+        return (f"**{r['operator_a']}** vs **{r['operator_b']}** en {r['common_selections']} selecciones comunes: "
+                f"{r['operator_a']} paga más en {r['a_better']}, {r['operator_b']} en {r['b_better']}, iguales {r['equal']}. "
+                f"Diferencia media: {r['avg_pct_difference_a_vs_b']:+.2f} %. Solo en {r['operator_a']}: {r['only_in_a']}; "
+                f"solo en {r['operator_b']}: {r['only_in_b']}.")
+    if name == "mejores_cuotas_partido":
+        ev = result["event"]
+        if not result["best_odds"]:
+            return f"**{ev['label']}**: no hay cuotas de operadores colombianos cargadas para este partido."
+        lines = [f"**{ev['label']}** — mejores cuotas por selección:"]
+        for r in result["best_odds"][:15]:
+            lines.append(f"- {r['selection']}: {r['best']['odds']:.2f} en {r['best']['operator']} ({r['n_operators']} casas)")
+        return "\n".join(lines)
+    if name == "oportunidades_valor":
+        if not result["value_bets"]:
+            return "No encontré selecciones con valor esperado positivo en las cuotas colombianas disponibles."
+        lines = ["Selecciones con EV positivo (no implica alta probabilidad de acierto):"]
+        for v in result["value_bets"][:10]:
+            lines.append(f"- {v['event']}: {v['selection']} @ {v['odds']:.2f} ({v['operator']}) · p={v['probability']:.1%} · EV {v['ev']:+.1%}")
+        return "\n".join(lines)
+    if name == "rendimiento_modelos":
+        if not result.get("n"):
+            return result.get("message", "Sin datos de rendimiento todavía.")
+        return (f"Predicciones liquidadas: {result['n']} · log loss {result['log_loss']:.4f} · Brier {result['brier']:.4f} · "
+                f"RPS {result['rps']:.4f} · acierto {result['accuracy']:.1%}")
     return "```json\n" + json.dumps(result, ensure_ascii=False, indent=1, default=str)[:6000] + "\n```"
 
 
