@@ -1,0 +1,57 @@
+name: Versión web (GitHub Pages)
+
+# Publica la app como sitio web estático en https://cristhianlujan45-blip.github.io/Apuestas/
+# Requisito único: Settings → Pages → Source: "GitHub Actions".
+# También adjunta un ZIP del sitio en Releases (app-latest) para alojarlo en cualquier hosting.
+on:
+  push:
+    paths: ["frontend/**", ".github/workflows/web.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Sitio para GitHub Pages (/Apuestas)
+        run: NEXT_PUBLIC_BASE_PATH=/Apuestas npm run build:mobile
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/out
+      - name: Sitio portable (raíz /) para cualquier hosting
+        run: |
+          rm -rf .next out && npm run build:mobile
+          cd out && zip -qr ../apuestas-intel-co-web.zip .
+      - name: Adjuntar ZIP en Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-latest
+          files: frontend/apuestas-intel-co-web.zip
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
