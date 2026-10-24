@@ -1,0 +1,56 @@
+# Blueprint de Render: https://render.com/deploy?repo=https://github.com/cristhianlujan45-blip/Apuestas
+# Crea la API (WebSocket en directo), el worker programado, PostgreSQL y Redis.
+# Costos aproximados (planes de Render): API starter + worker standard + Postgres basic.
+# Alternativa más barata: un VPS con Docker Compose (ver docs/DESPLIEGUE.md).
+services:
+  - type: web
+    name: apuestas-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase: { name: apuestas-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: apuestas-redis, property: connectionString }
+      - key: CORS_ORIGINS
+        value: https://cristhianlujan45-blip.github.io,https://localhost,capacitor://localhost,http://localhost:3000
+      - { key: ODDSPAPI_KEY, sync: false }
+      - { key: ODDS_API_NET_KEY, sync: false }
+      - { key: API_FOOTBALL_KEY, sync: false }
+      - { key: ANTHROPIC_API_KEY, sync: false }
+
+  - type: worker
+    name: apuestas-worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    dockerCommand: python -m app.worker
+    plan: standard
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: apuestas-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: apuestas-redis, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true
+      - { key: ODDSPAPI_KEY, sync: false }
+      - { key: ODDS_API_NET_KEY, sync: false }
+      - { key: API_FOOTBALL_KEY, sync: false }
+      - { key: NTFY_TOPIC, sync: false }
+
+  - type: keyvalue
+    name: apuestas-redis
+    plan: free
+    ipAllowList: []
+
+databases:
+  - name: apuestas-db
+    plan: basic-256mb
+    databaseName: apuestas

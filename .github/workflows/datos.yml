@@ -2,7 +2,8 @@ name: Datos (pipeline programado)
 
 # Ingiere partidos y cuotas, ejecuta los modelos y publica los JSON que usa la app
 # en la rama `datos`. Las claves opcionales se configuran como secretos del repositorio:
-# ODDS_API_NET_KEY (cuotas de casas colombianas), API_FOOTBALL_KEY, API_BASKETBALL_KEY.
+# ODDSPAPI_KEY (gratis: BetPlay y Rushbet), ODDS_API_NET_KEY (14 casas, de pago), API_FOOTBALL_KEY,
+# API_BASKETBALL_KEY y NTFY_TOPIC (alertas push al teléfono con la app ntfy).
 on:
   schedule:
     - cron: "17,47 * * * *"
@@ -26,6 +27,8 @@ jobs:
     timeout-minutes: 60
     env:
       ODDS_API_NET_KEY: ${{ secrets.ODDS_API_NET_KEY }}
+      ODDSPAPI_KEY: ${{ secrets.ODDSPAPI_KEY }}
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
       API_BASKETBALL_KEY: ${{ secrets.API_BASKETBALL_KEY }}
       JWT_SECRET: pipeline-sin-sesiones-de-usuario

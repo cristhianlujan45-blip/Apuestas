@@ -1,10 +1,10 @@
 "use client";
 import {
   Activity, BarChart3, Bot, BrainCircuit, Building2, Calculator, CalendarDays, Gauge, History, Layers,
-  LineChart, Menu, Radio, Scale, Search, Settings, ShieldCheck, Sparkles, Trophy, X, Zap,
+  LineChart, Menu, Radio, Scale, Search, Settings, ShieldCheck, Sparkles, Trophy, X, Zap, Wallet, Camera,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 
@@ -20,6 +20,8 @@ const NAV: { href: string; label: string; icon: ReactNode; group: string }[] = [
   { href: "/deportes", label: "Análisis por deporte", icon: <Trophy size={16} />, group: "Análisis" },
   { href: "/parlay", label: "PARLAY AI · Buscar mi cuota", icon: <Search size={16} />, group: "Combinadas" },
   { href: "/calculadora", label: "Calculadora COP", icon: <Calculator size={16} />, group: "Combinadas" },
+  { href: "/apuestas", label: "Mis apuestas · CLV", icon: <Wallet size={16} />, group: "Combinadas" },
+  { href: "/captura", label: "Cuotas desde foto", icon: <Camera size={16} />, group: "Combinadas" },
   { href: "/asistente", label: "Asistente IA", icon: <Bot size={16} />, group: "Combinadas" },
   { href: "/ia", label: "Inteligencia artificial", icon: <BrainCircuit size={16} />, group: "Modelos" },
   { href: "/rendimiento", label: "Rendimiento de modelos", icon: <Activity size={16} />, group: "Modelos" },
@@ -101,10 +103,20 @@ function useAndroidBack() {
   }, []);
 }
 
+function useAlerts() {
+  const router = useRouter();
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    import("@/lib/notify").then(async (m) => { stop = await m.startAlertWatcher((id) => router.push(`/partido?id=${id}`)); });
+    return () => stop?.();
+  }, [router]);
+}
+
 export default function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   useAndroidBack();
+  useAlerts();
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
   const nav = (
     <nav className="space-y-5 p-3">

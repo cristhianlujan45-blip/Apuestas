@@ -35,13 +35,16 @@ class Settings(BaseSettings):
     # Seguridad
     jwt_secret: str = Field(default="dev-only-change-me", min_length=8)
     jwt_expire_minutes: int = 60 * 12
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,https://localhost,capacitor://localhost,https://cristhianlujan45-blip.github.io"
     min_age: int = 18
 
     # Proveedores de cuotas
     odds_api_net_key: str | None = None
     odds_api_net_base_url: str = "https://api.odds-api.net/v1"
     the_odds_api_key: str | None = None
+    # OddsPapi (plan gratuito, 250 peticiones/mes): BetPlay y Rushbet Colombia
+    oddspapi_key: str | None = None
+    oddspapi_min_hours: float = 8.0
     the_odds_api_base_url: str = "https://api.the-odds-api.com/v4"
 
     # Proveedores de estadísticas
@@ -66,8 +69,8 @@ class Settings(BaseSettings):
     prematch_poll_seconds: int = 600
 
     # Ligas de football-data.co.uk usadas para entrenamiento histórico
-    football_data_leagues: str = "E0,E1,SP1,I1,D1,F1,N1,P1,B1,T1,SC0"
-    football_data_extra_leagues: str = "ARG,BRA,MEX,USA"
+    football_data_leagues: str = "E0,E1,E2,E3,EC,SP1,SP2,I1,I2,D1,D2,F1,F2,N1,P1,B1,T1,G1,SC0,SC1,SC2"
+    football_data_extra_leagues: str = "ARG,BRA,MEX,USA,CHN,JPN"
     football_data_seasons: str = "2223,2324,2425,2526,2627"
 
     @property

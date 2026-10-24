@@ -155,7 +155,59 @@ def export(db: Session, out: Path) -> dict:
     except Exception:  # noqa: BLE001
         _write(out / "teams.json", {})
 
+    # Feed de alertas (la app notifica las nuevas) y resultados con cuota de cierre (CLV)
+    from .services.alerts import current_alerts
+
+    _write(out / "alerts_feed.json", {"generated_at": now, "alerts": current_alerts(db)})
+    _write(out / "results.json", {"generated_at": now, "results": _results_with_closing(db)})
+
     manifest = {"schema": SCHEMA_VERSION, "generated_at": now, "events": len(events), "candidates": len(cands),
                 "quotes": len(quotes), "rating_groups": groups}
     _write(out / "manifest.json", manifest)
     return manifest
+
+
+def _results_with_closing(db: Session, days: int = 60) -> list[dict]:
+    """Partidos terminados con marcador y cuota de cierre de referencia (Pinnacle si existe).
+
+    Permite liquidar en el dispositivo las apuestas registradas y medir el CLV
+    (closing line value): si se apostó a mejor cuota que la de cierre justa.
+    """
+    from datetime import timedelta
+
+    import pandas as pd
+
+    from .engine.odds_math import devig
+    from .services import model_store
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    evs = db.scalars(select(Event).where(Event.status == "finished", Event.start_time >= since)
+                     .options(joinedload(Event.home), joinedload(Event.away))).unique().all()
+    if not evs:
+        return []
+    try:
+        hist = model_store.football_history(include_colombia=False)
+        by_id = {r["match_id"]: r for r in hist.to_dict("records")}
+    except Exception:  # noqa: BLE001
+        by_id = {}
+    out = []
+    for ev in evs:
+        row = by_id.get((ev.external_ids or {}).get("football_data_uk"))
+        closing = None
+        if row is not None:
+            for src, cols in (("pinnacle_cierre", ("psc_h", "psc_d", "psc_a")), ("promedio_cierre", ("close_h", "close_d", "close_a"))):
+                o = [row.get(c) for c in cols]
+                if all(x is not None and not pd.isna(x) and x > 1 for x in o):
+                    fair = devig(o, "power")
+                    closing = {"source": src, "1x2": {"home": o[0], "draw": o[1], "away": o[2]},
+                               "fair_1x2": {"home": fair[0], "draw": fair[1], "away": fair[2]}}
+                    break
+            ou = [row.get("close_o25"), row.get("close_u25")]
+            if closing is not None and all(x is not None and not pd.isna(x) and x > 1 for x in ou):
+                f = devig(ou, "power")
+                closing["total_2_5"] = {"over": ou[0], "under": ou[1]}
+                closing["fair_total_2_5"] = {"over": f[0], "under": f[1]}
+        out.append({"event_id": ev.id, "event": ev.label, "home": ev.home.name, "away": ev.away.name,
+                    "start_time": ev.start_time, "home_score": ev.home_score, "away_score": ev.away_score,
+                    "closing": closing})
+    return out

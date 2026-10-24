@@ -314,3 +314,34 @@ def matrix_total_goals_quantiles(matrix: np.ndarray) -> dict:
 
 
 __all__ = ["FootballEngine", "FootballPrediction", "LEAGUE_GROUPS", "group_of", "MAX_GOALS", "ML_MODELS"]
+
+
+def apply_availability(pred: FootballPrediction, attack_home: float, attack_away: float,
+                       detail: dict | None = None) -> FootballPrediction:
+    """Ajusta la predicción por bajas: escala la tasa de goles de cada equipo.
+
+    Para goles Poisson, multiplicar λ por f equivale a reponderar P(h) ∝ f^h,
+    así que cada celda (h, a) se multiplica por f_local^h · f_visitante^a y se
+    renormaliza (exacto para Poisson independiente, aproximado para Dixon-Coles).
+    """
+    if abs(attack_home - 1) < 1e-6 and abs(attack_away - 1) < 1e-6:
+        return pred
+    n, m = pred.matrix.shape
+    w = np.outer(attack_home ** np.arange(n), attack_away ** np.arange(m))
+
+    def adj(mat: np.ndarray) -> np.ndarray:
+        x = mat * w[: mat.shape[0], : mat.shape[1]]
+        return x / x.sum()
+
+    pred.matrix = adj(pred.matrix)
+    pred.draws_matrices = [adj(d) for d in pred.draws_matrices]
+    pred.probs = outcome_probs(pred.matrix)
+    lam, mu = pred.exp_goals
+    pred.exp_goals = (lam * attack_home, mu * attack_away)
+    if pred.draws_matrices:
+        st = np.array([outcome_probs(d) for d in pred.draws_matrices])
+        for i, k in enumerate(("home", "draw", "away")):
+            pred.uncertainty[k] = [float(np.percentile(st[:, i], 10)), float(np.percentile(st[:, i], 90))]
+    pred.data_quality["availability"] = {"attack_factor_home": attack_home, "attack_factor_away": attack_away,
+                                         **(detail or {})}
+    return pred

@@ -7,8 +7,9 @@ android {
         applicationId "co.apuestasintel.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // En CI el número de ejecución sube la versión para que Android acepte la actualización
+        versionCode Integer.parseInt(System.getenv("APP_VERSION_CODE") ?: "2")
+        versionName System.getenv("APP_VERSION_NAME") ?: "1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +17,10 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // Firma fija para que las actualizaciones (local y GitHub Actions) se instalen encima.
-    // Es una clave de depuración: para publicar en Google Play use una clave propia.
+    // debug: clave pública de pruebas (permite actualizar encima de versiones de prueba).
+    // release: clave PRIVADA del propietario, leída de variables de entorno (secretos de GitHub);
+    // nunca se guarda en el repositorio. Es la que exige Google Play.
+    def releaseStore = System.getenv("ANDROID_KEYSTORE_FILE")
     signingConfigs {
         debug {
             storeFile file("apuestas-debug.keystore")
@@ -25,11 +28,20 @@ android {
             keyAlias "androiddebugkey"
             keyPassword "android"
         }
+        if (releaseStore) {
+            release {
+                storeFile file(releaseStore)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS") ?: "apuestas"
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD") ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
     }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (releaseStore) signingConfig signingConfigs.release
         }
     }
 }

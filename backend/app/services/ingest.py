@@ -162,6 +162,41 @@ def ingest_odds_api_net(db: Session, sports: list[str] | None = None, hours_ahea
         return lg.fail(exc)
 
 
+def ingest_oddspapi(db: Session, force: bool = False) -> dict:
+    """Cuotas de BetPlay y Rushbet (OddsPapi, plan gratuito) respetando el cupo mensual."""
+    from ..providers import oddspapi
+
+    provider = oddspapi.OddsPapi()
+    if not provider.configured:
+        lg = _Log(db, "oddspapi", "odds")
+        return lg.fail(ProviderNotConfigured("ODDSPAPI_KEY no configurada (plan gratuito en oddspapi.io)"))
+    last = db.scalars(select(IngestionLog).where(IngestionLog.provider == "oddspapi", IngestionLog.kind == "odds",
+                                                 IngestionLog.status == "ok").order_by(IngestionLog.started_at.desc())).first()
+    from .events import aware
+
+    if not force and not oddspapi.due(aware(last.started_at) if last else None):
+        return {"provider": "oddspapi", "skipped": "cupo: se consulta cada ODDSPAPI_MIN_HOURS horas"}
+    lg = _Log(db, "oddspapi", "odds")
+    try:
+        events, quotes, meta = provider.odds()
+        by_ext = {}
+        for pe in events:
+            by_ext[pe.external_id] = upsert_event(db, pe)
+        captured = datetime.now(timezone.utc)
+        n = 0
+        groups: dict[str, list] = {}
+        for q in quotes:
+            groups.setdefault(q.external_event_id, []).append(q)
+        for ext, qs in groups.items():
+            ev = by_ext.get(ext)
+            if ev is not None:
+                n += add_quotes(db, ev, qs, {}, "oddspapi", captured)
+        return lg.done(len(events), quotes=n, **meta)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        return lg.fail(exc)
+
+
 def ingest_api_football(db: Session, days: int = 2, include_live: bool = True,
                         stats_for_live: bool = True) -> dict:
     api = ApiFootball()
@@ -201,3 +236,60 @@ def colombia_history(seasons: list[int]) -> pd.DataFrame:
                          "away": pe.away, "hg": pe.home_score, "ag": pe.away_score,
                          "match_id": f"COL:{pe.external_id}"})
     return pd.DataFrame(rows)
+
+
+def ingest_injuries(db: Session, max_fixtures: int = 10, hours_ahead: int = 30) -> dict:
+    """Bajas confirmadas (API-Football) para los próximos partidos con cuotas colombianas.
+
+    Calcula para cada equipo un factor de ataque: 1 − 0.6·Σ participación en goles
+    de los jugadores ausentes (goles+asistencias por partido / goles del equipo por
+    partido), con un máximo de −25 %. Es una heurística documentada; las bajas
+    defensivas no se modelan todavía.
+    """
+    from ..models import OddsQuote, Operator
+
+    api = ApiFootball()
+    lg = _Log(db, "api_football", "injuries")
+    if not api.configured:
+        return lg.fail(ProviderNotConfigured("API_FOOTBALL_KEY no configurada: sin bajas ni alineaciones"))
+    now = datetime.now(timezone.utc)
+    auth = select(Operator.key).where(Operator.status == "authorized")
+    with_quotes = select(OddsQuote.event_id).where(OddsQuote.operator_key.in_(auth)).distinct()
+    evs = db.scalars(select(Event).where(Event.sport == "football", Event.status == "scheduled",
+                                         Event.start_time > now, Event.start_time < now + timedelta(hours=hours_ahead))
+                     .options(joinedload(Event.home), joinedload(Event.away))
+                     .order_by(Event.id.in_(with_quotes).desc(), Event.start_time)).unique().all()
+    done = 0
+    try:
+        for ev in evs:
+            fid = (ev.external_ids or {}).get("api_football")
+            if not fid:
+                continue
+            avail = (ev.result_detail or {}).get("availability") or {}
+            if avail.get("checked_at") and (now - datetime.fromisoformat(avail["checked_at"])).total_seconds() < 6 * 3600:
+                continue
+            inj = api.injuries(fid)
+            season = (ev.result_detail or {}).get("season") or now.year
+            rd = ev.result_detail or {}
+            teams = {"home": rd.get("home_id"), "away": rd.get("away_id")}
+            res = {"checked_at": now.isoformat(), "home": {"missing": []}, "away": {"missing": []}}
+            for side, tid in teams.items():
+                share = 0.0
+                for p in [x for x in inj if x["team_id"] == tid and (x.get("type") or "").lower().startswith("missing")]:
+                    st = api.player_season(p["player_id"], season) if p.get("player_id") else {}
+                    apps = max(st.get("appearances") or 0, 1)
+                    involvement = ((st.get("goals") or 0) + 0.7 * (st.get("assists") or 0)) / apps
+                    p.update(st)
+                    p["involvement_per_game"] = involvement
+                    res[side]["missing"].append(p)
+                    share += involvement
+                # goles por partido de referencia del equipo ≈ 1.35
+                res[side]["attack_factor"] = max(0.75, 1 - 0.6 * min(share / 1.35, 0.42))
+            ev.result_detail = {**(ev.result_detail or {}), "availability": res}
+            done += 1
+            if done >= max_fixtures:
+                break
+        return lg.done(done)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        return lg.fail(exc)

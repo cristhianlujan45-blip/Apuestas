@@ -161,3 +161,21 @@ def test_surebets():
     r = next(x for x in res if x["market"] == "1x2")
     rets = [leg["return_cop"] for leg in r["legs"]]
     assert max(rets) - min(rets) <= 2 and min(rets) > 100000
+
+
+def test_oddspapi_market_mapping():
+    from app.providers.oddspapi import map_market
+
+    m1x2 = {"marketId": 101, "marketName": "Full Time Result", "period": "fulltime", "handicap": 0,
+            "outcomes": [{"outcomeId": 101, "outcomeName": "1"}, {"outcomeId": 102, "outcomeName": "X"},
+                         {"outcomeId": 103, "outcomeName": "2"}]}
+    assert map_market(m1x2, 101) == ("1x2", "home", None)
+    assert map_market(m1x2, 102) == ("1x2", "draw", None)
+    ou = {"marketId": 1010, "marketName": "Over Under Full Time", "period": "fulltime", "handicap": 2.5,
+          "outcomes": [{"outcomeId": 1010, "outcomeName": "Over"}, {"outcomeId": 1011, "outcomeName": "Under"}]}
+    assert map_market(ou, 1011) == ("total_goals", "under", 2.5)
+    btts = {"marketId": 104, "marketName": "Both Teams To Score", "period": "fulltime", "handicap": 0,
+            "outcomes": [{"outcomeId": 104, "outcomeName": "Yes"}, {"outcomeId": 105, "outcomeName": "No"}]}
+    assert map_market(btts, 105) == ("btts", "no", None)
+    half = {**m1x2, "period": "1st half"}
+    assert map_market(half, 101) is None

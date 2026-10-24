@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from .db import init_db, session_scope
@@ -116,9 +117,14 @@ def main(argv: list[str] | None = None) -> int:
 
             res = {"fixtures": ingest.ingest_football_data_fixtures(db),
                    "odds_co": ingest.ingest_odds_api_net(db),
+                   "odds_co_free": ingest.ingest_oddspapi(db),
                    "api_football": ingest.ingest_api_football(db, days=2)}
+            res["injuries"] = ingest.ingest_injuries(db)
             res["results"] = ingest.update_football_results(db, model_store.football_history(include_colombia=False))
             res["predictions"] = record_upcoming(db)
+            from .services.alerts import push_ntfy
+
+            res["push"] = push_ntfy(db, os.environ.get("NTFY_TOPIC"))
             res["settle"] = history.settle_parlays(db)
             _print(res)
         elif a.cmd == "xt":

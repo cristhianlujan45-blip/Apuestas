@@ -22,6 +22,11 @@ cuotas y **PARLAY AI**, un optimizador de combinadas con la función **BUSCAR MI
 | Calculadora COP | Retorno, ganancia, cuota necesaria (buscador inverso), inversión necesaria y control de capital. |
 | Historial y aprendizaje | Predicciones inmutables encadenadas por hash (y bloqueadas por trigger en PostgreSQL), con Brier, log loss, RPS, calibración, MAE/RMSE, ROI, detección de degradación, versionado y reentrenamiento controlado. |
 | Asistente IA | Con `ANTHROPIC_API_KEY` usa Claude con herramientas de la plataforma; sin clave, un enrutador local en español. Los números siempre salen de los modelos. |
+| Mis apuestas · CLV | Registro de lo apostado (desde PARLAY AI, Valor o a mano). Se liquida con los resultados reales y mide el CLV contra el cierre de Pinnacle sin margen. |
+| Cuotas desde foto | OCR en el propio teléfono (tesseract.js): detecta partido, 1X2, totales y ambos marcan en una captura de su casa. Usted revisa antes de guardar. |
+| Alertas | Surebets y apuestas de valor: notificación local en la app y push al teléfono con [ntfy](https://ntfy.sh) desde el pipeline. |
+| Bajas | Con `API_FOOTBALL_KEY`, las lesiones y sanciones recortan el ataque esperado según el peso del jugador en los goles del equipo. |
+| Copia de seguridad | Exporta e importa en un archivo sus apuestas, cuotas, combinadas, límites y ajustes. |
 | Juego responsable | Verificación de mayoría de edad, límites de gasto y de sesión (los aumentos se aplican tras 24 h), autoexclusión y recursos de ayuda. |
 
 ## App Android (APK)
@@ -33,11 +38,23 @@ cuotas y **PARLAY AI**, un optimizador de combinadas con la función **BUSCAR MI
     predicciones y publica los JSON en la rama `datos`.
   - La app los descarga y calcula en el teléfono PARLAY AI, el valor esperado, los surebets y la calculadora.
 - **Cuotas colombianas:**
-  - Con el secreto `ODDS_API_NET_KEY` llegan solas desde el feed.
-  - Sin él, puede copiar en la app (Configuración → Mis cuotas) las cuotas que ve en su casa de apuestas. La app las
-    valora al instante con el modelo del partido.
-- **Secretos del repositorio** (Settings → Secrets and variables → Actions): `ODDS_API_NET_KEY`, `API_FOOTBALL_KEY`,
-  `API_BASKETBALL_KEY`.
+  - Gratis: con el secreto `ODDSPAPI_KEY` (cuenta gratuita en <https://oddspapi.io>) llegan BetPlay y Rushbet. Como
+    el plan gratuito da 250 peticiones al mes, se consultan cada 8 horas.
+  - De pago: con `ODDS_API_NET_KEY` llegan los 14 operadores.
+  - Sin claves: copie las cuotas en Configuración → Mis cuotas, o hágales una captura y use *Cuotas desde foto*.
+- **Alertas al teléfono:**
+  - Instale la app ntfy y suscríbase a un tema difícil de adivinar.
+  - Guarde ese tema en el secreto `NTFY_TOPIC`.
+- **Secretos del repositorio** (Settings → Secrets and variables → Actions):
+  - datos: `ODDSPAPI_KEY`, `ODDS_API_NET_KEY`, `API_FOOTBALL_KEY`, `API_BASKETBALL_KEY`, `NTFY_TOPIC`;
+  - firma: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`.
+- **Firma y Google Play:**
+  - Con los secretos de firma, el flujo compila un APK firmado con su propia clave y un `.aab` para Google Play.
+  - Sin ellos, compila un APK de depuración.
+  - Para pasar de la versión de depuración a la firmada hay que desinstalar la app una vez.
+  - Guarde el `.jks` fuera del repositorio: sin él no podrá publicar actualizaciones en Play.
+- **Directo real con servidor:** ver [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md) (Render o VPS). Después, en
+  Configuración → Servidor en vivo, pegue la URL del servidor.
 - **Compilación local:**
   ```bash
   cd frontend && npm run build:mobile && npx cap sync android
@@ -123,8 +140,10 @@ TEST_DATABASE_URL=postgresql+psycopg://user@host/db ../.venv/bin/python -m pytes
 
 | Variable | Para qué | Sin ella |
 |---|---|---|
-| `ODDS_API_NET_KEY` | Cuotas de los 14 operadores colombianos | Carga manual o CSV de cuotas (Configuración) |
-| `API_FOOTBALL_KEY` | Directo, estadísticas, alineaciones, Liga BetPlay | No hay directo ni modelo para Colombia |
+| `ODDSPAPI_KEY` | Cuotas gratuitas de BetPlay y Rushbet (cada 8 h) | Carga manual, CSV o foto |
+| `ODDS_API_NET_KEY` | Cuotas de los 14 operadores colombianos | Carga manual, CSV o foto (Configuración) |
+| `NTFY_TOPIC` | Alertas push de surebets y valor | Solo notificaciones dentro de la app |
+| `API_FOOTBALL_KEY` | Directo, estadísticas, bajas, Liga BetPlay | No hay directo, bajas ni modelo para Colombia |
 | `ANTHROPIC_API_KEY` | Asistente conversacional con Claude | Enrutador local de intenciones |
 | — | football-data.co.uk y StatsBomb Open Data | Siempre disponibles (gratuitos) |
 

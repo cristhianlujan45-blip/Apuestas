@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Badge, Card, Disclaimer, Empty, ErrorBox, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { api } from "@/lib/api";
+import { addBet } from "@/lib/bets";
 import { bogota, cop, odds, pct, signedPct, SPORT_LABEL } from "@/lib/format";
 
 const PRESETS = [2, 3, 5, 10, 15, 20, 30, 50, 100];
@@ -60,7 +61,14 @@ function ParlayCard({ k, a, stake }: { k: string; a: any; stake: number }) {
           ))}
         </ul>
       </details>
-      <button className="btn-ghost mt-3" onClick={() => setShowCmp(!showCmp)}>{showCmp ? "Ocultar" : "Comparar casas"}</button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="btn-ghost" onClick={() => setShowCmp(!showCmp)}>{showCmp ? "Ocultar" : "Comparar casas"}</button>
+        <button className="btn-ghost" onClick={() => {
+          const legs = a.legs.flatMap((l: any) => l.components || [l]).map((l: any) => ({ event_id: l.event_id, event: l.event, selection_key: l.selection_key, selection: l.selection, odds: l.odds, start_time: l.start_time }));
+          addBet({ operator: a.operator, stake_cop: stake, odds: a.total_odds, legs, description: `Parlay ${k} (${a.label})` });
+          alert("Registrada en Mis apuestas. Recuerde: la plataforma no coloca apuestas; regístrela solo si la hizo en su casa.");
+        }}>Registrar como apostada</button>
+      </div>
       {showCmp && <Comparison cmp={a.comparison} />}
     </Card>
   );

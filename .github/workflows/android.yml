@@ -32,15 +32,30 @@ jobs:
         run: npm run build:mobile
       - name: Sincronizar Capacitor
         run: npx cap sync android
-      - name: Compilar APK
+      - name: Compilar APK (prueba) y, si hay clave privada, APK + AAB firmados para Google Play
         working-directory: frontend/android
-        run: ./gradlew assembleDebug --no-daemon
-      - name: Renombrar APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/apuestas-intel-co.apk
+        env:
+          APP_VERSION_CODE: ${{ github.run_number }}
+          APP_VERSION_NAME: 1.${{ github.run_number }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          mkdir -p ../dist
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+            ./gradlew assembleRelease bundleRelease --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk ../dist/apuestas-intel-co.apk
+            cp app/build/outputs/bundle/release/app-release.aab ../dist/apuestas-intel-co.aab
+          else
+            ./gradlew assembleDebug --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk ../dist/apuestas-intel-co.apk
+          fi
       - uses: actions/upload-artifact@v4
         with:
-          name: apuestas-intel-co-apk
-          path: frontend/android/app/build/outputs/apk/debug/apuestas-intel-co.apk
+          name: apuestas-intel-co-android
+          path: frontend/dist/*
       - name: Publicar en Releases (app-latest)
         uses: softprops/action-gh-release@v2
         with:
@@ -48,6 +63,8 @@ jobs:
           name: Apuestas Intel CO — APK
           prerelease: false
           body: |
-            APK de Android generado automáticamente desde la rama ${{ github.ref_name }} (commit ${{ github.sha }}).
+            APK de Android generado automáticamente (commit ${{ github.sha }}).
             Instalación: descargue `apuestas-intel-co.apk`, ábralo en el teléfono y permita "instalar apps de origen desconocido".
-          files: frontend/android/app/build/outputs/apk/debug/apuestas-intel-co.apk
+            `apuestas-intel-co.aab` (si existe) es el paquete firmado para subir a Google Play.
+            Versión web portable: `apuestas-intel-co-web.zip`.
+          files: frontend/dist/*

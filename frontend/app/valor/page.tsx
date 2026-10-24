@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Card, Empty, ErrorBox, Loading, PageHeader } from "@/components/ui";
+import { addBet } from "@/lib/bets";
 import { bogota, odds, pct, signedPct } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
@@ -20,12 +21,16 @@ export default function Value() {
           <Empty>No hay selecciones con EV ≥ {pct(edge, 0)}. {data?.report?.events_with_quotes === 0 ? "No hay cuotas colombianas cargadas." : "El mercado colombiano está alineado con el modelo para los eventos disponibles."}</Empty>
         ) : (
           <div className="overflow-x-auto"><table className="data min-w-[900px]">
-            <thead><tr><th>Evento</th><th>Selección</th><th>Operador</th><th>Cuota</th><th>Prob. implícita</th><th>Prob. modelo</th><th>Cuota justa</th><th>EV</th><th>Kelly ¼</th><th>Consulta</th></tr></thead>
+            <thead><tr><th>Evento</th><th>Selección</th><th>Operador</th><th>Cuota</th><th>Prob. implícita</th><th>Prob. modelo</th><th>Cuota justa</th><th>EV</th><th>Kelly ¼</th><th>Consulta</th><th /></tr></thead>
             <tbody>{data.value_bets.map((v: any, i: number) => (
               <tr key={i}><td><Link className="hover:text-accent" href={`/partido?id=${v.event_id}`}>{v.event}</Link><div className="text-[11px] text-ink-muted">{bogota(v.start_time)}</div></td>
                 <td>{v.selection}</td><td>{v.operator}</td><td className="num">{odds(v.odds)}</td><td className="num">{pct(v.implied_probability)}</td>
                 <td className="num">{pct(v.probability)}{v.probability_low != null && <span className="text-ink-muted"> ({pct(v.probability_low, 0)}–{pct(v.probability_high, 0)})</span>}</td>
-                <td className="num">{odds(v.fair_odds)}</td><td className="num text-good">{signedPct(v.ev)}</td><td className="num">{pct(v.kelly_quarter)}</td><td className="num text-ink-muted">{bogota(v.captured_at, false)}</td></tr>
+                <td className="num">{odds(v.fair_odds)}</td><td className="num text-good">{signedPct(v.ev)}</td><td className="num">{pct(v.kelly_quarter)}</td><td className="num text-ink-muted">{bogota(v.captured_at, false)}</td>
+                <td><button className="text-xs text-accent" onClick={() => {
+                  const st = Number(prompt("¿Cuánto apostó (COP)?", "10000"));
+                  if (st > 0) { addBet({ operator: v.operator, stake_cop: st, odds: v.odds, description: v.selection, legs: [{ event_id: v.event_id, event: v.event, selection_key: v.selection_key, selection: v.selection, odds: v.odds, start_time: v.start_time }] }); alert("Registrada en Mis apuestas"); }
+                }}>Registrar</button></td></tr>
             ))}</tbody></table></div>
         )}
         <p className="mt-2 text-xs text-ink-muted">{data?.note} El ROI histórico real de estas señales se mide en «Rendimiento de modelos».</p>

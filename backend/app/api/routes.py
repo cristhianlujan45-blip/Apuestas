@@ -44,6 +44,7 @@ def status(db: Session = Depends(get_db)) -> dict:
     return {
         "providers": {
             "odds_api_net": {"configured": bool(s.odds_api_net_key), "role": "Cuotas de operadores colombianos"},
+            "oddspapi": {"configured": bool(s.oddspapi_key), "role": "Cuotas BetPlay y Rushbet (plan gratuito)"},
             "api_football": {"configured": bool(s.api_football_key), "role": "Partidos, directo, estadísticas, Liga BetPlay"},
             "api_basketball": {"configured": bool(s.api_basketball_key or s.api_football_key), "role": "Baloncesto"},
             "football_data_uk": {"configured": True, "role": "Histórico, estadísticas y cuotas de referencia (gratuito)"},

@@ -96,6 +96,16 @@ def model_event(db: Session, ev: Event, n_draws: int = 120) -> EventModel:
         league = next((lg for lg, g in LEAGUE_TO_GROUP.items() if g == group), group or "UNK")
         pred: FootballPrediction = eng.predict(league, home, away, aware(ev.start_time), _reference_1x2(db, ev),
                                                n_draws=n_draws)
+        avail = (ev.result_detail or {}).get("availability")
+        if avail:
+            from ..engine.football.engine import apply_availability
+
+            fh = (avail.get("home") or {}).get("attack_factor", 1.0)
+            fa = (avail.get("away") or {}).get("attack_factor", 1.0)
+            pred = apply_availability(pred, fh, fa, {
+                "missing_home": [p["player"] for p in (avail.get("home") or {}).get("missing", [])],
+                "missing_away": [p["player"] for p in (avail.get("away") or {}).get("missing", [])],
+                "checked_at": avail.get("checked_at")})
         summary = pred.summary()
         summary["model_names"] = {"home": home, "away": away, "group": group}
         if ev.status == "live" and ev.minute is not None:

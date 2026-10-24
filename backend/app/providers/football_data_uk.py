@@ -29,7 +29,8 @@ CACHE_DIR = DATA_DIR / "raw" / "football_data"
 
 LEAGUE_NAMES = {
     "E0": ("Premier League", "Inglaterra"), "E1": ("Championship", "Inglaterra"),
-    "E2": ("League One", "Inglaterra"), "SC0": ("Premiership", "Escocia"),
+    "E2": ("League One", "Inglaterra"), "E3": ("League Two", "Inglaterra"), "EC": ("National League", "Inglaterra"),
+    "SC0": ("Premiership", "Escocia"), "SC1": ("Championship", "Escocia"), "SC2": ("League One", "Escocia"),
     "SP1": ("LaLiga", "España"), "SP2": ("LaLiga 2", "España"), "I1": ("Serie A", "Italia"),
     "I2": ("Serie B", "Italia"), "D1": ("Bundesliga", "Alemania"), "D2": ("2. Bundesliga", "Alemania"),
     "F1": ("Ligue 1", "Francia"), "F2": ("Ligue 2", "Francia"), "N1": ("Eredivisie", "Países Bajos"),
@@ -121,6 +122,8 @@ def normalize(raw: pd.DataFrame, league: str, season: str | None = None) -> pd.D
         "close_d": _first(df, ["AvgCD", "PSCD", "B365CD"]),
         "close_a": _first(df, ["AvgCA", "PSCA", "B365CA"]),
         "psc_h": _num(df, "PSCH"), "psc_d": _num(df, "PSCD"), "psc_a": _num(df, "PSCA"),
+        "close_o25": _first(df, ["PC>2.5", "AvgC>2.5", "B365C>2.5"]),
+        "close_u25": _first(df, ["PC<2.5", "AvgC<2.5", "B365C<2.5"]),
         "o25": _first(df, ["Avg>2.5", "BbAv>2.5", "B365>2.5"]),
         "u25": _first(df, ["Avg<2.5", "BbAv<2.5", "B365<2.5"]),
         "ah_line": _first(df, ["AHh", "BbAHh"]),

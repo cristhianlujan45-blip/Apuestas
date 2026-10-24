@@ -346,6 +346,8 @@ export async function route(path: string, init: { method?: string; json?: any } 
       kelly_quarter: Math.max(0, (x.probability * x.odds - 1) / (x.odds - 1) / 4) })).sort((a, b) => b.ev - a.ev);
     return { value_bets: vb, report: { events_with_quotes: new Set(c.cands.map((x) => x.event_id)).size }, note: "Valor esperado positivo no equivale a alta probabilidad de acierto." };
   }
+  if (p === "/results") return file("results.json").catch(() => ({ results: [] }));
+  if (p === "/alerts-feed") return file("alerts_feed.json").catch(() => ({ alerts: [] }));
   if (p === "/surebets") {
     const c = await ctx();
     return { surebets: surebets(c.quotes, +(q.get("stake") || 100000)), quotes: c.quotes.length };

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Card, ErrorBox, PageHeader, StatusBadge } from "@/components/ui";
-import { api, getToken, isStatic, setToken } from "@/lib/api";
+import { api, getToken, isStatic, serverUrl, setServerUrl, setToken } from "@/lib/api";
 import { MARKET_LABEL, MATRIX_MARKETS } from "@/lib/engine";
 import { bogota, cop } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
@@ -197,6 +197,98 @@ function DeviceOdds() {
   );
 }
 
+
+const BACKUP_KEYS = ["manual_quotes", "bets", "parlays", "limits", "alerts_enabled", "alerts_min_ev", "data_url", "server_url"];
+
+function Backup() {
+  const [txt, setTxt] = useState("");
+  const [msg, setMsg] = useState("");
+  const exportNow = () => {
+    const data: Record<string, unknown> = { app: "apuestas-intel-co", version: 1, exported_at: new Date().toISOString() };
+    for (const k of BACKUP_KEYS) { try { const v = localStorage.getItem(k); if (v != null) data[k] = v; } catch { /* */ } }
+    const json = JSON.stringify(data);
+    setTxt(json);
+    try {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+      a.download = `apuestas-intel-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+    } catch { /* en la app se usa copiar/pegar */ }
+    navigator.clipboard?.writeText(json).then(() => setMsg("Copia creada y copiada al portapapeles."), () => setMsg("Copia creada: copie el texto de abajo."));
+  };
+  const importNow = (raw: string) => {
+    try {
+      const d = JSON.parse(raw);
+      if (d.app !== "apuestas-intel-co") throw new Error("Archivo no reconocido");
+      for (const k of BACKUP_KEYS) if (typeof d[k] === "string") localStorage.setItem(k, d[k]);
+      setMsg("Datos restaurados. Recargando…");
+      setTimeout(() => location.reload(), 800);
+    } catch (e: any) { setMsg(`No se pudo restaurar: ${e.message}`); }
+  };
+  return (
+    <Card title="Copia de seguridad y paso a otro dispositivo">
+      <p className="text-xs text-ink-muted">Sus cuotas, apuestas, combinadas y límites se guardan en este dispositivo. Exporte una copia y restáurela en el celular o computador donde quiera continuar.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="btn-primary" onClick={exportNow}>Exportar copia</button>
+        <label className="btn-ghost cursor-pointer">Restaurar desde archivo<input type="file" accept="application/json,.json" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) importNow(await f.text()); }} /></label>
+        <button className="btn-ghost" disabled={!txt} onClick={() => importNow(txt)}>Restaurar desde el texto</button>
+      </div>
+      <textarea className="input mt-3 h-24 font-mono text-[11px]" placeholder="…o pegue aquí el texto de una copia para restaurarla" value={txt} onChange={(e) => setTxt(e.target.value)} />
+      {msg && <p className="mt-2 text-xs text-ink-2">{msg}</p>}
+    </Card>
+  );
+}
+
+function Alerts() {
+  const [st, setSt] = useState({ enabled: false, min_ev: 0.03 });
+  const [msg, setMsg] = useState("");
+  useEffect(() => { import("@/lib/notify").then((m) => setSt(m.alertSettings())); }, []);
+  const save = async (enabled: boolean, min_ev: number) => {
+    const m = await import("@/lib/notify");
+    if (enabled && !(await m.requestPermission())) { setMsg("El sistema no concedió permiso para notificaciones."); return; }
+    m.setAlertSettings(enabled, min_ev);
+    setSt({ enabled, min_ev });
+    setMsg(enabled ? "Alertas activadas." : "Alertas desactivadas.");
+  };
+  return (
+    <Card title="Alertas de oportunidades">
+      <p className="text-xs text-ink-muted">Avisa cuando aparece un surebet o una apuesta con valor esperado por encima del umbral, mientras la app está abierta y al volver a ella.</p>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={st.enabled} onChange={(e) => save(e.target.checked, st.min_ev)} /> Activar alertas</label>
+        <div><label className="label">EV mínimo</label><input type="number" step="0.01" className="input w-28" value={st.min_ev} onChange={(e) => save(st.enabled, +e.target.value)} /></div>
+        <button className="btn-ghost" onClick={async () => { const m = await import("@/lib/notify"); const n = await m.checkAndNotify(); setMsg(n ? `${n} alertas nuevas enviadas.` : "No hay oportunidades nuevas ahora."); }}>Comprobar ahora</button>
+      </div>
+      <p className="mt-3 text-xs text-ink-muted">Para recibir avisos con la app cerrada: instale la app gratuita <b>ntfy</b>, suscríbase a un tema privado (un nombre difícil de adivinar) y guárdelo como secreto <code>NTFY_TOPIC</code> del repositorio. El pipeline enviará las oportunidades detectadas con el feed de cuotas.</p>
+      {msg && <p className="mt-2 text-xs text-ink-2">{msg}</p>}
+    </Card>
+  );
+}
+
+function LiveServer() {
+  const [url, setUrl] = useState("");
+  const [msg, setMsg] = useState("");
+  useEffect(() => { setUrl(serverUrl() || ""); }, []);
+  if (process.env.NEXT_PUBLIC_MODE !== "static") return null;
+  const test = async () => {
+    try {
+      const r = await fetch(`${url.replace(/\/+$/, "")}/api/health`);
+      if (!r.ok) throw new Error(String(r.status));
+      setServerUrl(url); setMsg("Conectado. Recargando…"); setTimeout(() => location.reload(), 600);
+    } catch (e: any) { setMsg(`No responde (${e.message}). Revise la URL y que el servidor esté encendido.`); }
+  };
+  return (
+    <Card title="Servidor en vivo (opcional)">
+      <p className="text-xs text-ink-muted">Si despliega el backend (por ejemplo con el botón de Render del README), la app usará datos en tiempo real, WebSocket de partidos en directo y cuentas sincronizadas. Sin servidor funciona con los datos del pipeline cada 30 minutos.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <input className="input max-w-md" placeholder="https://su-servidor.onrender.com" value={url} onChange={(e) => setUrl(e.target.value)} />
+        <button className="btn-primary" onClick={test}>Conectar</button>
+        {serverUrl() && <button className="btn-ghost" onClick={() => { setServerUrl(null); location.reload(); }}>Desconectar</button>}
+      </div>
+      {msg && <p className="mt-2 text-xs text-ink-2">{msg}</p>}
+    </Card>
+  );
+}
+
 function StaticSettings() {
   const status = useApi("/status");
   const [me, setMe] = useState<any>(null);
@@ -221,11 +313,14 @@ function StaticSettings() {
               <tr key={k}><td>{k}</td><td className="text-xs text-ink-2">{p.role}</td><td>{p.configured ? <StatusBadge status="good">activo</StatusBadge> : <StatusBadge status="warning">sin clave</StatusBadge>}</td></tr>
             ))}</tbody></table>
           )}
-          <p className="mt-2 text-xs text-ink-muted">Las claves se configuran como secretos del repositorio en GitHub (Settings → Secrets → Actions): ODDS_API_NET_KEY, API_FOOTBALL_KEY. Nunca se guardan en el teléfono.</p>
+          <p className="mt-2 text-xs text-ink-muted">Las claves se configuran como secretos del repositorio en GitHub (Settings → Secrets → Actions): ODDSPAPI_KEY (gratis), ODDS_API_NET_KEY, API_FOOTBALL_KEY, NTFY_TOPIC. Nunca se guardan en el teléfono.</p>
         </Card>
       </div>
       <DeviceOdds />
+      <Alerts />
       {me && <Limits me={me} reload={loadMe} />}
+      <LiveServer />
+      <Backup />
     </div>
   );
 }
@@ -256,6 +351,9 @@ function ServerSettings() {
       </div>
       {me && <Limits me={me} reload={loadMe} />}
       <ManualOdds />
+      <Alerts />
+      <LiveServer />
+      <Backup />
       {me?.is_admin && <Admin />}
       {status.data?.ingestion?.length > 0 && (
         <Card title="Últimas ingestas">

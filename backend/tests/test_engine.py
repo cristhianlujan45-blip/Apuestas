@@ -182,3 +182,17 @@ def test_models_are_picklable():
     pickle.loads(pickle.dumps(t))
     pickle.loads(pickle.dumps(BaseballModel()))
     pickle.loads(pickle.dumps(VolleyballModel()))
+
+
+def test_availability_adjustment():
+    from app.engine.football.engine import FootballEngine, apply_availability
+
+    df, _ = _synthetic_league(n_rounds=30)
+    for c in ("hs", "as", "hst", "ast", "hc", "ac", "hcards", "acards"):
+        df[c] = 3
+    eng = FootballEngine(ml_models=["logreg"], fit_bivariate=False).fit(df, df["date"].max() + timedelta(days=1))
+    base = eng.predict("SYN", "T0", "T11", n_draws=20)
+    p0, (l0, _) = base.probs.copy(), base.exp_goals
+    adj = apply_availability(base, 0.8, 1.0, {"missing_home": ["X"]})
+    assert adj.probs[0] < p0[0] and adj.exp_goals[0] == pytest.approx(l0 * 0.8)
+    assert adj.matrix.sum() == pytest.approx(1)

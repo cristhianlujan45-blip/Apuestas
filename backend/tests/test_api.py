@@ -154,3 +154,28 @@ def test_prediction_chain(client):
     preds = client.get("/api/predictions").json()
     assert preds["chain"]["valid"]
     assert preds["predictions"][0]["probs"]
+
+
+def test_results_with_closing_and_alerts(client, monkeypatch):
+    from app.db import session_scope
+    from app.export_static import _results_with_closing
+    from app.models import Event
+    from app.services import model_store
+    from app.services.alerts import current_alerts
+
+    with session_scope() as db:
+        ev = db.query(Event).first()
+        ev.status, ev.home_score, ev.away_score = "finished", 2, 1
+        ev.start_time = datetime.now(timezone.utc) - timedelta(days=1)
+        ev.external_ids = {**(ev.external_ids or {}), "football_data_uk": "X1"}
+        db.flush()
+        hist = pd.DataFrame([{"match_id": "X1", "psc_h": 1.9, "psc_d": 3.6, "psc_a": 4.4, "close_h": 1.85,
+                              "close_d": 3.5, "close_a": 4.2, "close_o25": 1.95, "close_u25": 1.92}])
+        monkeypatch.setattr(model_store, "football_history", lambda include_colombia=False: hist)
+        res = _results_with_closing(db)
+        r = next(x for x in res if x["event_id"] == ev.id)
+        assert r["closing"]["source"] == "pinnacle_cierre"
+        assert abs(sum(r["closing"]["fair_1x2"].values()) - 1) < 1e-9
+        assert r["closing"]["fair_total_2_5"]["over"] < 0.5
+        alerts = current_alerts(db)
+        assert isinstance(alerts, list)

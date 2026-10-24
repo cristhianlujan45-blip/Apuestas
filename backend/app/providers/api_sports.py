@@ -122,6 +122,27 @@ class ApiFootball:
                         "player": (r.get("player") or {}).get("name")})
         return out
 
+    def injuries(self, fixture_id: str) -> list[dict]:
+        """Jugadores que no estarán disponibles para el partido (lesión/sanción)."""
+        out = []
+        for r in self._get("/injuries", fixture=fixture_id):
+            pl, tm = r.get("player") or {}, r.get("team") or {}
+            out.append({"player_id": pl.get("id"), "player": pl.get("name"), "type": pl.get("type"),
+                        "reason": pl.get("reason"), "team_id": tm.get("id"), "team": tm.get("name")})
+        return out
+
+    def player_season(self, player_id: int, season: int) -> dict:
+        """Goles, asistencias y partidos del jugador en la temporada (suma de competiciones)."""
+        rows = self._get("/players", id=player_id, season=season)
+        g = a = apps = mins = 0
+        for r in rows:
+            for st in r.get("statistics", []):
+                g += (st.get("goals") or {}).get("total") or 0
+                a += (st.get("goals") or {}).get("assists") or 0
+                apps += (st.get("games") or {}).get("appearences") or 0
+                mins += (st.get("games") or {}).get("minutes") or 0
+        return {"goals": g, "assists": a, "appearances": apps, "minutes": mins}
+
     def status(self) -> dict:
         with self._client() as c:
             return http_get_json(c, f"{self.base_url}/status")  # type: ignore[return-value]
