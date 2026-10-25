@@ -274,6 +274,40 @@ class UserBet(Base):
     payout_cop: Mapped[float | None] = mapped_column(Float)
 
 
+class AgentBet(Base):
+    """Apuesta SIMULADA del agente: se registra antes del partido y no se puede cambiar.
+
+    Los campos de la recomendación entran en una cadena de hash; los de liquidación se
+    rellenan después. Sirve para medir si el agente gana antes de arriesgar dinero real.
+    """
+
+    __tablename__ = "agent_bets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    selection_key: Mapped[str] = mapped_column(String(128))
+    selection_label: Mapped[str] = mapped_column(Text)
+    operator_key: Mapped[str] = mapped_column(String(64))
+    odds: Mapped[float] = mapped_column(Float)
+    p_est: Mapped[float] = mapped_column(Float)
+    edge: Mapped[float] = mapped_column(Float)
+    stake_cop: Mapped[float] = mapped_column(Float)
+    bankroll_before: Mapped[float] = mapped_column(Float)
+    policy_version: Mapped[str] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(32))
+    reason: Mapped[str] = mapped_column(Text)
+    prev_hash: Mapped[str] = mapped_column(String(64))
+    hash: Mapped[str] = mapped_column(String(64), unique=True)
+    # Liquidación
+    result: Mapped[str | None] = mapped_column(String(16))  # won | lost | void | half_won | half_lost
+    payout_cop: Mapped[float | None] = mapped_column(Float)
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clv: Mapped[float | None] = mapped_column(Float)
+
+    event: Mapped[Event] = relationship()
+
+
 class Alert(Base):
     __tablename__ = "alerts"
 

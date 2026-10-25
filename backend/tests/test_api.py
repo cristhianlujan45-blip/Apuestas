@@ -178,6 +178,56 @@ def test_stale_lines_and_reference_parlay(client):
     assert q and all(x["operator"] not in ("pinnacle", "intl_consensus") for x in q)
 
 
+def _synthetic_odds_history(seed: int = 3) -> pd.DataFrame:
+    """Partidos con cuota justa de Pinnacle y una «mejor cuota» que a veces la supera."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for i in range(4000):
+        p = rng.dirichlet([4, 2.5, 3])
+        r = rng.choice(3, p=p)
+        hg, ag = (1, 0) if r == 0 else (1, 1) if r == 1 else (0, 1)
+        ps = 1 / (p * 1.03)
+        mx = ps * rng.choice([0.97, 1.0, 1.08], size=3, p=[0.5, 0.35, 0.15])
+        rows.append({"date": pd.Timestamp("2021-08-01", tz="UTC") + pd.Timedelta(hours=8 * i), "league": "E0",
+                     "hg": hg, "ag": ag, "ps_h": ps[0], "ps_d": ps[1], "ps_a": ps[2], "psc_h": ps[0], "psc_d": ps[1],
+                     "psc_a": ps[2], "max_h": mx[0], "max_d": mx[1], "max_a": mx[2], "odds_h": ps[0] * 0.97,
+                     "odds_d": ps[1] * 0.97, "odds_a": ps[2] * 0.97})
+    return pd.DataFrame(rows)
+
+
+def test_agent_learns_picks_and_settles(client):
+    from app.db import session_scope
+    from app.models import AgentBet, Event
+    from app.services import agent
+
+    with session_scope() as db:
+        res = agent.learn(db, _synthetic_odds_history())
+        assert res["out_of_sample"]["n"] > 0 and res["policy"]["min_edge"] in agent.GRID
+        pol, mv = agent.current_policy(db)
+        assert mv is not None and mv.status == "champion"
+        run = agent.run(db)
+        assert run["new_picks"] >= 1
+        picks = db.query(AgentBet).all()
+        assert all(b.odds <= pol.max_odds and b.edge >= pol.min_edge for b in picks)
+        assert len({b.event_id for b in picks}) == len(picks)  # una por partido
+        assert agent.run(db)["new_picks"] == 0  # no repite
+        b = picks[0]
+        h0 = b.hash
+        ev = db.get(Event, b.event_id)
+        ev.status, ev.home_score, ev.away_score = "finished", 2, 0
+        db.commit()
+        assert agent.settle(db) >= 1
+        db.refresh(b)
+        assert b.result in ("won", "lost", "void", "half_won", "half_lost") and b.hash == h0
+        payload = agent.export_payload(db)
+        assert payload["record"]["settled"] >= 1 and payload["bankroll"]["current"] != agent.START_BANKROLL or b.result == "void"
+        assert payload["backtest"]["out_of_sample"]["n"] > 0
+        ev.status, ev.home_score, ev.away_score = "scheduled", None, None
+        db.commit()
+    r = client.get("/api/agent").json()
+    assert "policy" in r and "predictions_check" in r
+
+
 def test_stale_limit_by_source():
     from app.services.odds import stale_limit
 

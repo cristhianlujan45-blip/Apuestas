@@ -42,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("pipeline", help="Ingesta + resultados + predicciones + liquidación (ejecución programada)")
     em = sub.add_parser("ensure-model", help="Entrena si no hay modelo campeón disponible o tiene más de N días")
     em.add_argument("--max-age-days", type=int, default=7)
+    al = sub.add_parser("agent-learn", help="Agente simulado: aprender la política con validación walk-forward")
+    al.add_argument("--max-age-days", type=float, default=None)
+    sub.add_parser("agent-run", help="Agente simulado: liquidar y registrar nuevas recomendaciones")
     x = sub.add_parser("xt", help="Construir xT/xA con StatsBomb Open Data")
     x.add_argument("--competition", type=int, default=43)
     x.add_argument("--season", type=int, default=106)
@@ -120,13 +123,30 @@ def main(argv: list[str] | None = None) -> int:
                    "odds_co_free": ingest.ingest_oddspapi(db),
                    "api_football": ingest.ingest_api_football(db, days=2)}
             res["injuries"] = ingest.ingest_injuries(db)
-            res["results"] = ingest.update_football_results(db, model_store.football_history(include_colombia=False))
+            hist = model_store.football_history(include_colombia=False)
+            res["results"] = ingest.update_football_results(db, hist)
             res["predictions"] = record_upcoming(db)
+            from .services import agent
+
+            try:
+                res["agent_learn"] = agent.learn(db, hist, max_age_days=7)
+                res["agent"] = agent.run(db)
+            except Exception as exc:  # noqa: BLE001 — el agente no debe tumbar el pipeline
+                db.rollback()
+                res["agent"] = {"error": str(exc)}
             from .services.alerts import push_ntfy
 
             res["push"] = push_ntfy(db, os.environ.get("NTFY_TOPIC"))
             res["settle"] = history.settle_parlays(db)
             _print(res)
+        elif a.cmd == "agent-learn":
+            from .services import agent
+
+            _print(agent.learn(db, max_age_days=a.max_age_days))
+        elif a.cmd == "agent-run":
+            from .services import agent
+
+            _print(agent.run(db))
         elif a.cmd == "xt":
             from .engine.football import xt
 

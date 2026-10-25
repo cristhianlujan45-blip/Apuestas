@@ -22,6 +22,7 @@ cuotas y **PARLAY AI**, un optimizador de combinadas con la función **BUSCAR MI
 | Calculadora COP | Retorno, ganancia, cuota necesaria (buscador inverso), inversión necesaria y control de capital. |
 | Historial y aprendizaje | Predicciones inmutables encadenadas por hash (y bloqueadas por trigger en PostgreSQL), con Brier, log loss, RPS, calibración, MAE/RMSE, ROI, detección de degradación, versionado y reentrenamiento controlado. |
 | Asistente IA | Con `ANTHROPIC_API_KEY` usa Claude con herramientas de la plataforma; sin clave, un enrutador local en español. Los números siempre salen de los modelos. |
+| IA de apuestas (simulada) | Agente que aprende con validación walk-forward la regla que gana a largo plazo (mejor cuota frente al precio justo de Pinnacle), recomienda antes de cada partido, apuesta en simulado con banca virtual y sella cada recomendación. Después compara lo que predijo con lo que pasó y endurece la regla si su CLV real es negativo. **No coloca apuestas reales.** |
 | Cuotas retrasadas | Compara cada cuota colombiana con el precio justo de Pinnacle o del consenso internacional. La marca *retrasada* cuando la referencia se movió después del último cambio de la casa. |
 | Bonos y apuestas gratis | Convierte apuestas gratis y de calificación en saldo cubriendo el resultado contrario en otra casa; busca la mejor cobertura con las cuotas disponibles. |
 | Córners y tarjetas | Modelo de fuerza por equipo (binomial negativa) con cuota justa por línea en la ficha del partido; las cuotas de córners y tarjetas se valoran como las de goles. |

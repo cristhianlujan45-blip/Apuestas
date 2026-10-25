@@ -375,6 +375,7 @@ export async function route(path: string, init: { method?: string; json?: any } 
       kelly_quarter: Math.max(0, (x.probability * x.odds - 1) / (x.odds - 1) / 4) })).sort((a, b) => b.ev - a.ev);
     return { value_bets: vb, report: { events_with_quotes: new Set(c.cands.map((x) => x.event_id)).size }, note: "Valor esperado positivo no equivale a alta probabilidad de acierto." };
   }
+  if (p === "/agent") return file("agent.json").catch(() => { throw new HttpError(503, "El agente aún no tiene datos: se generan en la próxima ejecución del pipeline."); });
   if (p === "/results") return file("results.json").catch(() => ({ results: [] }));
   if (p === "/alerts-feed") return file("alerts_feed.json").catch(() => ({ alerts: [] }));
   if (p === "/quotes") {

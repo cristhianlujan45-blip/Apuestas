@@ -167,7 +167,11 @@ def export(db: Session, out: Path) -> dict:
     _write(out / "reference_fair.json", round_ref(ref))
     _write(out / "stale_lines.json", {"generated_at": now, "lines": stale_lines(db, ref=ref)})
     _write(out / "alerts_feed.json", {"generated_at": now, "alerts": current_alerts(db)})
-    _write(out / "results.json", {"generated_at": now, "results": _results_with_closing(db)})
+    results = _results_with_closing(db)
+    _write(out / "results.json", {"generated_at": now, "results": results})
+    from .services import agent
+
+    _write(out / "agent.json", {"generated_at": now, **agent.export_payload(db, results)})
 
     manifest = {"schema": SCHEMA_VERSION, "generated_at": now, "events": len(events), "candidates": len(cands),
                 "quotes": len(quotes), "rating_groups": groups}

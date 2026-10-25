@@ -279,6 +279,14 @@ def stale_lines_route(min_edge: float = 0.02, db: Session = Depends(get_db)) -> 
             "note": "Cuotas de casas colombianas por encima del precio justo de Pinnacle/consenso internacional."}
 
 
+@router.get("/agent")
+def agent_route(db: Session = Depends(get_db)) -> dict:
+    """Agente de apuestas simuladas: política aprendida, recomendaciones abiertas y su historial."""
+    from ..services import agent
+
+    return agent.export_payload(db)
+
+
 @router.get("/quotes")
 def quotes_co(db: Session = Depends(get_db)) -> dict:
     """Últimas cuotas de operadores autorizados en eventos por jugar (calculadora de bonos)."""

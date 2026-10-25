@@ -134,3 +134,20 @@ export function RollingLine({ values, height = 180, name = "Log loss móvil", re
     </ResponsiveContainer>
   );
 }
+
+/** Evolución de una banca (COP) con la línea del capital inicial como referencia. */
+export function BankrollChart({ points, start, height = 220 }: { points: { label: string; bankroll: number }[]; start: number; height?: number }) {
+  const fmt = (v: number) => `$${Math.round(v).toLocaleString("es-CO")}`;
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={points} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+        <CartesianGrid stroke={GRID} vertical={false} />
+        <XAxis dataKey="label" tick={TICK} stroke={AXIS} minTickGap={40} />
+        <YAxis tick={TICK} stroke={AXIS} domain={["auto", "auto"]} width={72} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+        <Tooltip content={<Tip fmt={fmt} />} />
+        <ReferenceLine y={start} stroke="#898781" strokeDasharray="4 4" />
+        <Line dataKey="bankroll" name="Banca" stroke={SERIES[2]} strokeWidth={2} dot={false} isAnimationActive={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}

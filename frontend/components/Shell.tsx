@@ -13,6 +13,7 @@ const NAV: { href: string; label: string; icon: ReactNode; group: string }[] = [
   { href: "/partidos", label: "Partidos de hoy", icon: <CalendarDays size={16} />, group: "Centro" },
   { href: "/directo", label: "En directo", icon: <Radio size={16} />, group: "Centro" },
   { href: "/proximos", label: "Próximos", icon: <Layers size={16} />, group: "Centro" },
+  { href: "/ia-apuestas", label: "IA de apuestas (simulada)", icon: <Bot size={16} />, group: "Centro" },
   { href: "/ventaja", label: "Ventaja · Surebets", icon: <Zap size={16} />, group: "Análisis" },
   { href: "/retrasadas", label: "Cuotas retrasadas", icon: <Hourglass size={16} />, group: "Análisis" },
   { href: "/predicciones", label: "Predicciones", icon: <LineChart size={16} />, group: "Análisis" },
