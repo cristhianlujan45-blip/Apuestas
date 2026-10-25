@@ -1,5 +1,5 @@
 "use client";
-import { Bot, CalendarDays, Camera, Gift, Hourglass, Search, Wallet, Zap } from "lucide-react";
+import { Bot, CalendarDays, Camera, Gift, Hourglass, Search, Ticket, Zap } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import EventTable from "@/components/EventTable";
@@ -17,7 +17,7 @@ const ACTIONS: { href: string; title: string; text: string; icon: ReactNode }[] 
   { href: "/ventaja", title: "Surebets", text: "Ganancia segura entre casas", icon: <Zap size={22} /> },
   { href: "/bonos", title: "Bonos", text: "Convierta apuestas gratis en saldo", icon: <Gift size={22} /> },
   { href: "/captura", title: "Cuotas desde foto", text: "Lea las cuotas de su casa", icon: <Camera size={22} /> },
-  { href: "/apuestas", title: "Mis apuestas", text: "Ganancias y CLV", icon: <Wallet size={22} /> },
+  { href: "/boleto", title: "Mi boleto", text: "Elija usted las cuotas de uno o varios partidos", icon: <Ticket size={22} /> },
 ];
 
 function DataStatus() {

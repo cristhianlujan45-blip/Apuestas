@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
@@ -269,7 +270,9 @@ def get_event(event_id: int, db: Session = Depends(get_db)) -> dict:
                                           "ev_best": pr.ev(best["odds"]) if best else None}})
     return {"event": event_dict(ev), "model": em.summary, "model_version": em.model_version,
             "data_sufficient": em.sufficient, "model_note": em.reason, "markets": priced or cmp["rows"],
-            "margins": cmp["margins"], "operators_with_quotes": cmp["operators_with_quotes"]}
+            "margins": cmp["margins"], "operators_with_quotes": cmp["operators_with_quotes"],
+            # Matriz de marcadores: permite valorar en el dispositivo combinadas del mismo partido
+            "matrix": None if em.matrix is None else np.round(em.matrix, 7).tolist()}
 
 
 @router.get("/events/{event_id}/simulate")

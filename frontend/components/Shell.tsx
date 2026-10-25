@@ -2,8 +2,9 @@
 import {
   Activity, BarChart3, Bot, BrainCircuit, Building2, Calculator, CalendarDays, Gauge, History, Layers,
   LineChart, Menu, Radio, Scale, Search, Settings, ShieldCheck, Sparkles, Trophy, X, Zap, Wallet, Camera, Hourglass, Gift,
-  Home, Lock, MessageCircle,
+  Home, Lock, MessageCircle, Ticket,
 } from "lucide-react";
+import SlipButton from "./SlipButton";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -21,6 +22,7 @@ const NAV: NavItem[] = [
   { href: "/ventaja", label: "Surebets", icon: <Zap size={18} />, group: "Apostar mejor", desc: "Ganancia segura entre casas" },
   { href: "/bonos", label: "Bonos y apuestas gratis", icon: <Gift size={18} />, group: "Apostar mejor", desc: "Convierta promociones en saldo" },
   { href: "/comparador", label: "Comparador de cuotas", icon: <Scale size={18} />, group: "Apostar mejor", desc: "Qué casa paga más" },
+  { href: "/boleto", label: "Mi boleto", icon: <Ticket size={18} />, group: "Mis herramientas", desc: "Arme su combinada a mano" },
   { href: "/apuestas", label: "Mis apuestas", icon: <Wallet size={18} />, group: "Mis herramientas", desc: "Registro, ganancias y CLV" },
   { href: "/captura", label: "Cuotas desde foto", icon: <Camera size={18} />, group: "Mis herramientas", desc: "Lea las cuotas de una captura" },
   { href: "/calculadora", label: "Calculadora COP", icon: <Calculator size={18} />, group: "Mis herramientas", desc: "Retorno y cuota necesaria" },
@@ -162,7 +164,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   useAutoSync();
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
   const current = NAV.find((n) => isActive(path, n.href) && n.href !== "/") || (path === "/" ? NAV[0]
-    : path.startsWith("/partido") ? { label: "Partido" } : null);
+    : path.startsWith("/partido") ? { label: "Partido" } : path.startsWith("/boleto") ? { label: "Mi boleto" } : null);
   useEffect(() => { setOpen(false); }, [path]);
   const nav = (compact: boolean) => (
     <nav className="space-y-5 p-3">
@@ -216,6 +218,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           <span className="shrink-0 rounded-md border border-line-strong px-1.5 py-0.5 text-[11px] text-ink-muted">+18</span>
         </header>
         <UpdateBanner />
+        <SlipButton />
         <main className="mx-auto max-w-[1400px] px-4 pb-28 pt-5 lg:pb-8">{children}</main>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface-1/95 backdrop-blur lg:hidden"

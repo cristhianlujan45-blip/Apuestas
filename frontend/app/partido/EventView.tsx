@@ -4,6 +4,7 @@ import { DistributionChart, OddsHistoryChart } from "@/components/charts";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, ProbBar, StatusBadge } from "@/components/ui";
 import { bogota, num, odds, pct, signedPct, STATUS_LABEL } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
+import MatchBoard from "@/components/MatchBoard";
 import { COUNT_MARKETS, fairOdds, pEff, priceCounts, type CountParams } from "@/lib/engine";
 
 const COUNT_ROWS: { market: string; label: string; lines: number[] }[] = [
@@ -76,6 +77,8 @@ export default function EventView({ id }: { id: string }) {
             {ev.home_score != null && <> · resultado final <b className="text-ink">{ev.home_score}-{ev.away_score}</b></>}</p>
         </Card>
       )}
+
+      <MatchBoard detail={data} />
 
       {m.probs && (
         <div className="grid gap-4 lg:grid-cols-3">
