@@ -209,3 +209,15 @@ def test_totals_calibration_keeps_1x2():
         assert abs(over_prob(c, 2.5) - target) < 2e-3
         assert np.allclose(outcome_probs(c), p, atol=1e-6)
         assert abs(c.sum() - 1) < 1e-9
+
+
+def test_margin_calibration_matches_handicap_and_keeps_1x2():
+    from app.engine.football.engine import ah_cover_prob, calibrate_matrix_margin
+    from app.engine.football.goals import matrix_from_rates, outcome_probs
+
+    m = matrix_from_rates(2.4, 0.6)
+    p = outcome_probs(m)
+    for line, target in ((-2.25, 0.50), (-1.5, 0.42)):
+        c = calibrate_matrix_margin(m, p, line, target)
+        assert abs(ah_cover_prob(c, line) - target) < 5e-3
+        assert np.allclose(outcome_probs(c), p, atol=1e-6)

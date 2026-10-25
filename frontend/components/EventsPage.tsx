@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import DayPicker, { dayLabel, todayBogota } from "./DayPicker";
 import EventTable from "./EventTable";
 import { Card, ErrorBox, Loading, PageHeader } from "./ui";
-import { SPORT_LABEL } from "@/lib/format";
+import SportPicker from "./SportPicker";
 import { useApi } from "@/lib/useApi";
 
 export default function EventsPage({ scope, title, subtitle }: { scope: "today" | "upcoming" | "finished" | "day"; title: string; subtitle: string }) {
@@ -28,12 +28,8 @@ export default function EventsPage({ scope, title, subtitle }: { scope: "today" 
   }).length;
   return (
     <div className="space-y-4">
-      <PageHeader title={scope === "day" && day[0] ? `${title} · ${dayLabel(day[0])}` : title} subtitle={subtitle} right={
-        <div className="flex flex-wrap gap-1">
-          {["", "football", "basketball", "tennis", "baseball", "volleyball"].map((s) => (
-            <button key={s} onClick={() => setSport(s)} className={`tab ${sport === s ? "tab-active" : ""}`}>{s ? SPORT_LABEL[s] : "Todos"}</button>
-          ))}
-        </div>} />
+      <PageHeader title={scope === "day" && day[0] ? `${title} · ${dayLabel(day[0])}` : title} subtitle={subtitle} />
+      <SportPicker value={sport ? [sport] : []} onChange={(v) => setSport(v[0] || "")} multiple={false} allLabel="Todos" />
       {scope === "day" && (
         <Card title="Elija el día">
           <DayPicker value={day} onChange={setDay} sport={sport || undefined} />

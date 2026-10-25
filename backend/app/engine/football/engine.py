@@ -210,7 +210,8 @@ class FootballEngine:
     # ------------------------------------------------------------ predicción
     def predict(self, league: str, home: str, away: str, kickoff: datetime | None = None,
                 market_odds: tuple[float, float, float] | None = None, n_draws: int = 200,
-                seed: int = 0, market_totals: tuple[float, float] | None = None) -> FootballPrediction:
+                seed: int = 0, market_totals: tuple[float, float] | None = None,
+                market_ah: tuple[float, float, float] | None = None) -> FootballPrediction:
         g = group_of(league)
         components: dict[str, list[float]] = {}
         quality = {"group": g, "issues": []}
@@ -281,6 +282,16 @@ class FootballEngine:
             calibrated = calibrate_matrix_totals(calibrated, probs, target)
             quality["totals_market"] = {"model_over_2_5": p_model, "market_over_2_5": p_mkt, "weight": w_tot,
                                         "blended_over_2_5": target}
+        # Hándicap asiático del mercado (línea del local, cuota local, cuota visitante): ajusta la
+        # distribución de márgenes dentro de las victorias, sin tocar el 1X2.
+        if market_ah is not None and all(market_ah[1:]) and min(market_ah[1:]) > 1 and abs(market_ah[0]) >= 1 and w_tot > 0:
+            line, oh, oa = market_ah
+            p_mkt = float(devig([oh, oa], "power")[0])
+            p_model = ah_cover_prob(calibrated, line)
+            target = w_tot * p_mkt + (1 - w_tot) * p_model
+            calibrated = calibrate_matrix_margin(calibrated, probs, line, target,
+                                                 over_target=quality.get("totals_market", {}).get("blended_over_2_5"))
+            quality["ah_market"] = {"line": line, "model_cover": p_model, "market_cover": p_mkt, "blended_cover": target}
         if draws:
             ratio = calibrated / np.clip(matrix, 1e-15, None)
             cal_draws = []
@@ -338,6 +349,61 @@ def calibrate_matrix_totals(matrix: np.ndarray, probs: np.ndarray, target_over: 
                 hi = t
         cur = cur * np.exp(((lo + hi) / 2) * tot)
         cur = calibrate_matrix(cur / cur.sum(), probs)
+    return cur
+
+
+def ah_cover_prob(matrix: np.ndarray, line: float) -> float:
+    """Probabilidad «efectiva» de que el local cubra el hándicap (media ganada cuenta ½, devolución se excluye)."""
+    n, m = matrix.shape
+    d = np.subtract.outer(np.arange(n), np.arange(m)).astype(float)
+
+    def one(l: float) -> tuple[np.ndarray, np.ndarray]:
+        x = d + l
+        return (x > 1e-9).astype(float), (np.abs(x) <= 1e-9).astype(float)
+
+    if abs((line * 4) % 2 - 1) < 1e-9:  # línea de cuarto: mitad en cada línea vecina
+        w1, p1 = one(line - 0.25)
+        w2, p2 = one(line + 0.25)
+        win, push = (w1 + w2) / 2, (p1 + p2) / 2
+    else:
+        win, push = one(line)
+    tot = matrix.sum()
+    pw, pp = float((matrix * win).sum() / tot), float((matrix * push).sum() / tot)
+    return pw / (1 - pp) if pp < 1 else 0.5
+
+
+def calibrate_matrix_margin(matrix: np.ndarray, probs: np.ndarray, line: float, target_cover: float,
+                            over_target: float | None = None, rounds: int = 4) -> np.ndarray:
+    """Inclina la distribución del margen dentro de las victorias del favorito (exp(s·|margen|)),
+    reescalando esa región para conservar el 1X2, hasta que la cobertura del hándicap = objetivo."""
+    n, m = matrix.shape
+    d = np.subtract.outer(np.arange(n), np.arange(m)).astype(float)
+    region = d > 0 if line < 0 else d < 0
+    mag = np.abs(d)
+    cur = matrix / matrix.sum()
+
+    def tilt(mat: np.ndarray, s: float) -> np.ndarray:
+        out = mat.copy()
+        mass = mat[region].sum()
+        t = mat[region] * np.exp(s * mag[region])
+        out[region] = t * (mass / t.sum()) if t.sum() > 0 else t
+        return out
+
+    for _ in range(rounds):
+        # Cubrir con el local (línea negativa) sube con márgenes grandes; con línea positiva el
+        # favorito es el visitante y cubrir el local baja cuando crecen sus márgenes.
+        sign = 1.0 if line < 0 else -1.0
+        lo, hi = -2.0, 2.0
+        for _ in range(50):
+            s = (lo + hi) / 2
+            if (ah_cover_prob(tilt(cur, s), line) - target_cover) * sign < 0:
+                lo = s
+            else:
+                hi = s
+        cur = tilt(cur, (lo + hi) / 2)
+        if over_target is not None:
+            cur = calibrate_matrix_totals(cur, probs, over_target, rounds=1)
+        cur = calibrate_matrix(cur, probs)
     return cur
 
 

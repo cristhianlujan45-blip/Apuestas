@@ -2,39 +2,48 @@
 import {
   Activity, BarChart3, Bot, BrainCircuit, Building2, Calculator, CalendarDays, Gauge, History, Layers,
   LineChart, Menu, Radio, Scale, Search, Settings, ShieldCheck, Sparkles, Trophy, X, Zap, Wallet, Camera, Hourglass, Gift,
+  Home, Lock, MessageCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 
-const NAV: { href: string; label: string; icon: ReactNode; group: string }[] = [
-  { href: "/", label: "Dashboard", icon: <Gauge size={16} />, group: "Centro" },
-  { href: "/partidos", label: "Partidos por día", icon: <CalendarDays size={16} />, group: "Centro" },
-  { href: "/directo", label: "En directo", icon: <Radio size={16} />, group: "Centro" },
-  { href: "/proximos", label: "Próximos", icon: <Layers size={16} />, group: "Centro" },
-  { href: "/ia-apuestas", label: "IA de apuestas (simulada)", icon: <Bot size={16} />, group: "Centro" },
-  { href: "/ventaja", label: "Ventaja · Surebets", icon: <Zap size={16} />, group: "Análisis" },
-  { href: "/retrasadas", label: "Cuotas retrasadas", icon: <Hourglass size={16} />, group: "Análisis" },
-  { href: "/predicciones", label: "Predicciones", icon: <LineChart size={16} />, group: "Análisis" },
-  { href: "/comparador", label: "Comparador de cuotas", icon: <Scale size={16} />, group: "Análisis" },
-  { href: "/valor", label: "Detector de valor", icon: <Sparkles size={16} />, group: "Análisis" },
-  { href: "/deportes", label: "Análisis por deporte", icon: <Trophy size={16} />, group: "Análisis" },
-  { href: "/parlay", label: "PARLAY AI · Buscar mi cuota", icon: <Search size={16} />, group: "Combinadas" },
-  { href: "/bonos", label: "Bonos y apuestas gratis", icon: <Gift size={16} />, group: "Combinadas" },
-  { href: "/calculadora", label: "Calculadora COP", icon: <Calculator size={16} />, group: "Combinadas" },
-  { href: "/apuestas", label: "Mis apuestas · CLV", icon: <Wallet size={16} />, group: "Combinadas" },
-  { href: "/captura", label: "Cuotas desde foto", icon: <Camera size={16} />, group: "Combinadas" },
-  { href: "/asistente", label: "Asistente IA", icon: <Bot size={16} />, group: "Combinadas" },
-  { href: "/ia", label: "Inteligencia artificial", icon: <BrainCircuit size={16} />, group: "Modelos" },
-  { href: "/rendimiento", label: "Rendimiento de modelos", icon: <Activity size={16} />, group: "Modelos" },
-  { href: "/historial", label: "Historial", icon: <History size={16} />, group: "Modelos" },
-  { href: "/estadisticas", label: "Estadísticas", icon: <BarChart3 size={16} />, group: "Modelos" },
-  { href: "/operadores", label: "Operadores (Coljuegos)", icon: <Building2 size={16} />, group: "Plataforma" },
-  { href: "/juego-responsable", label: "Juego responsable", icon: <ShieldCheck size={16} />, group: "Plataforma" },
-  { href: "/configuracion", label: "Configuración", icon: <Settings size={16} />, group: "Plataforma" },
-  { href: "/privacidad", label: "Privacidad", icon: <ShieldCheck size={16} />, group: "Plataforma" },
+type NavItem = { href: string; label: string; icon: ReactNode; group: string; desc?: string };
+const NAV: NavItem[] = [
+  { href: "/", label: "Inicio", icon: <Home size={18} />, group: "Empezar", desc: "Resumen y accesos rápidos" },
+  { href: "/partidos", label: "Partidos por día", icon: <CalendarDays size={18} />, group: "Empezar", desc: "Elija el día y vea probabilidades" },
+  { href: "/directo", label: "En directo", icon: <Radio size={18} />, group: "Empezar", desc: "Partidos que se están jugando" },
+  { href: "/parlay", label: "Buscar mi cuota (PARLAY)", icon: <Search size={18} />, group: "Apostar mejor", desc: "Combinadas para la cuota que quiere" },
+  { href: "/ia-apuestas", label: "IA de apuestas", icon: <Bot size={18} />, group: "Apostar mejor", desc: "Recomendaciones que se evalúan solas" },
+  { href: "/retrasadas", label: "Cuotas retrasadas", icon: <Hourglass size={18} />, group: "Apostar mejor", desc: "Casas que pagan más de lo justo" },
+  { href: "/valor", label: "Detector de valor", icon: <Sparkles size={18} />, group: "Apostar mejor", desc: "Cuotas por encima del modelo" },
+  { href: "/ventaja", label: "Surebets", icon: <Zap size={18} />, group: "Apostar mejor", desc: "Ganancia segura entre casas" },
+  { href: "/bonos", label: "Bonos y apuestas gratis", icon: <Gift size={18} />, group: "Apostar mejor", desc: "Convierta promociones en saldo" },
+  { href: "/comparador", label: "Comparador de cuotas", icon: <Scale size={18} />, group: "Apostar mejor", desc: "Qué casa paga más" },
+  { href: "/apuestas", label: "Mis apuestas", icon: <Wallet size={18} />, group: "Mis herramientas", desc: "Registro, ganancias y CLV" },
+  { href: "/captura", label: "Cuotas desde foto", icon: <Camera size={18} />, group: "Mis herramientas", desc: "Lea las cuotas de una captura" },
+  { href: "/calculadora", label: "Calculadora COP", icon: <Calculator size={18} />, group: "Mis herramientas", desc: "Retorno y cuota necesaria" },
+  { href: "/asistente", label: "Asistente", icon: <MessageCircle size={18} />, group: "Mis herramientas", desc: "Pregunte en español" },
+  { href: "/predicciones", label: "Predicciones", icon: <LineChart size={18} />, group: "Datos y modelos", desc: "Registro sellado antes del partido" },
+  { href: "/estadisticas", label: "Estadísticas de equipos", icon: <BarChart3 size={18} />, group: "Datos y modelos", desc: "Últimos partidos de un equipo" },
+  { href: "/deportes", label: "Análisis por deporte", icon: <Trophy size={18} />, group: "Datos y modelos", desc: "Modelos de cada deporte" },
+  { href: "/rendimiento", label: "Rendimiento real", icon: <Activity size={18} />, group: "Datos y modelos", desc: "Aciertos con partidos jugados" },
+  { href: "/ia", label: "Cómo funciona el modelo", icon: <BrainCircuit size={18} />, group: "Datos y modelos", desc: "Validación y comparación" },
+  { href: "/historial", label: "Historial de combinadas", icon: <History size={18} />, group: "Datos y modelos", desc: "Combinadas generadas" },
+  { href: "/configuracion", label: "Configuración", icon: <Settings size={18} />, group: "Cuenta y ayuda", desc: "Banca, alertas, sincronización" },
+  { href: "/operadores", label: "Casas autorizadas", icon: <Building2 size={18} />, group: "Cuenta y ayuda", desc: "Registro de Coljuegos" },
+  { href: "/juego-responsable", label: "Juego responsable", icon: <ShieldCheck size={18} />, group: "Cuenta y ayuda", desc: "Límites y ayuda" },
+  { href: "/privacidad", label: "Privacidad", icon: <Lock size={18} />, group: "Cuenta y ayuda" },
 ];
+// Barra inferior del celular: lo que más se usa, a un toque
+const TABS: { href: string; label: string; icon: ReactNode }[] = [
+  { href: "/", label: "Inicio", icon: <Home size={20} /> },
+  { href: "/partidos", label: "Partidos", icon: <CalendarDays size={20} /> },
+  { href: "/parlay", label: "Mi cuota", icon: <Search size={20} /> },
+  { href: "/ia-apuestas", label: "IA", icon: <Bot size={20} /> },
+];
+const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path.startsWith(href));
 
 function AgeGate() {
   const [ok, setOk] = useState(true);
@@ -152,17 +161,24 @@ export default function Shell({ children }: { children: ReactNode }) {
   useAlerts();
   useAutoSync();
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
-  const nav = (
+  const current = NAV.find((n) => isActive(path, n.href) && n.href !== "/") || (path === "/" ? NAV[0]
+    : path.startsWith("/partido") ? { label: "Partido" } : null);
+  useEffect(() => { setOpen(false); }, [path]);
+  const nav = (compact: boolean) => (
     <nav className="space-y-5 p-3">
       {groups.map((g) => (
         <div key={g}>
-          <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-ink-muted">{g}</div>
+          <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-widest text-ink-muted">{g}</div>
           {NAV.filter((n) => n.group === g).map((n) => {
-            const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
+            const active = isActive(path, n.href);
             return (
               <Link key={n.href} href={n.href} onClick={() => setOpen(false)}
-                className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${active ? "bg-surface-3 text-ink" : "text-ink-2 hover:bg-surface-2"}`}>
-                {n.icon} {n.label}
+                className={`flex items-center gap-3 rounded-lg px-2 ${compact ? "py-1.5" : "py-2.5"} text-sm ${active ? "bg-surface-3 text-ink" : "text-ink-2 hover:bg-surface-2"}`}>
+                <span className={active ? "text-accent" : "text-ink-muted"}>{n.icon}</span>
+                <span className="min-w-0">
+                  <span className="block leading-tight">{n.label}</span>
+                  {!compact && n.desc && <span className="block text-[11px] leading-tight text-ink-muted">{n.desc}</span>}
+                </span>
               </Link>
             );
           })}
@@ -174,29 +190,46 @@ export default function Shell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen">
       <AgeGate />
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-line bg-surface-1 lg:block">
-        <div className="border-b border-line px-4 py-4">
+        <Link href="/" className="block border-b border-line px-4 py-4">
           <div className="text-sm font-semibold">Apuestas Intel <span className="text-accent">CO</span></div>
-          <div className="text-[11px] text-ink-muted">Centro de inteligencia deportiva</div>
-        </div>
-        {nav}
+          <div className="text-[11px] text-ink-muted">Análisis deportivo · +18</div>
+        </Link>
+        {nav(true)}
       </aside>
       {open && (
-        <div className="fixed inset-0 z-40 bg-black/70 lg:hidden" onClick={() => setOpen(false)}>
-          <aside className="h-full w-72 overflow-y-auto bg-surface-1" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-end p-2"><button className="btn-ghost" onClick={() => setOpen(false)}><X size={16} /></button></div>
-            {nav}
+        <div className="fixed inset-0 z-50 bg-black/70 lg:hidden" onClick={() => setOpen(false)}>
+          <aside className="h-full w-[86vw] max-w-sm overflow-y-auto bg-surface-1 pb-24" onClick={(e) => e.stopPropagation()}
+            style={{ paddingTop: "env(safe-area-inset-top)" }}>
+            <div className="flex items-center justify-between border-b border-line px-4 py-3">
+              <div className="text-sm font-semibold">Apuestas Intel <span className="text-accent">CO</span></div>
+              <button className="btn-ghost px-2" onClick={() => setOpen(false)} aria-label="Cerrar menú"><X size={18} /></button>
+            </div>
+            {nav(false)}
           </aside>
         </div>
       )}
       <div className="min-w-0 flex-1">
         <header style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }} className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line bg-page/90 px-4 py-2 backdrop-blur">
-          <button className="btn-ghost lg:hidden" onClick={() => setOpen(true)} aria-label="Menú"><Menu size={16} /></button>
-          <StatusStrip />
-          <span className="text-xs text-ink-muted">+18 · Juego responsable</span>
+          <button className="btn-ghost px-2 lg:hidden" onClick={() => setOpen(true)} aria-label="Menú"><Menu size={18} /></button>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium lg:hidden">{current?.label || "Apuestas Intel CO"}</span>
+          <div className="hidden min-w-0 flex-1 lg:block"><StatusStrip /></div>
+          <span className="shrink-0 rounded-md border border-line-strong px-1.5 py-0.5 text-[11px] text-ink-muted">+18</span>
         </header>
         <UpdateBanner />
-        <main className="mx-auto max-w-[1400px] px-4 py-6">{children}</main>
+        <main className="mx-auto max-w-[1400px] px-4 pb-28 pt-5 lg:pb-8">{children}</main>
       </div>
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface-1/95 backdrop-blur lg:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }} aria-label="Navegación principal">
+        {TABS.map((t) => {
+          const active = isActive(path, t.href);
+          return (
+            <Link key={t.href} href={t.href} className={`flex flex-col items-center gap-0.5 py-2 text-[11px] ${active ? "text-accent" : "text-ink-muted"}`}>
+              {t.icon}<span>{t.label}</span>
+            </Link>
+          );
+        })}
+        <button onClick={() => setOpen(true)} className="flex flex-col items-center gap-0.5 py-2 text-[11px] text-ink-muted"><Menu size={20} /><span>Más</span></button>
+      </nav>
     </div>
   );
 }

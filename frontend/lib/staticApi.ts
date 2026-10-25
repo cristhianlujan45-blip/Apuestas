@@ -43,12 +43,14 @@ async function file<T = any>(name: string, maxAgeMs = 5 * 60e3): Promise<T> {
   if (hit && Date.now() - hit.t < maxAgeMs) return hit.v;
   try {
     const r = await fetch(`${dataUrl()}/${name}?v=${Math.floor(Date.now() / 300e3)}`, { cache: "no-store" });
+    if (r.status === 404 && name.startsWith("events/")) throw new HttpError(404, "No se encontró este partido: puede haber terminado hace más de 14 días o ya no está en los datos.");
     if (!r.ok) throw new Error(`${r.status}`);
     const v = await r.json();
     mem[name] = { t: Date.now(), v };
     if (["events.json", "candidates.json", "quotes.json", "operators.json", "status.json", "matrices.json"].includes(name)) save(`cache:${name}`, v);
     return v;
   } catch (e) {
+    if (e instanceof HttpError) throw e;
     const cached = load<T | null>(`cache:${name}`, null);
     if (cached) return cached;
     throw new HttpError(503, `Sin conexión con la fuente de datos (${name}). Revise su internet o la URL de datos en Configuración.`);
@@ -197,10 +199,10 @@ async function search(req: Req) {
   }
   const LABELS: Record<string, string> = { A: "Mayor probabilidad estimada", B: "Equilibrio probabilidad / valor", C: "Mejor valor esperado", D: "Menor número de selecciones" };
   const EXPL: Record<string, string> = {
-    conservative: "Maximiza la probabilidad conjunta usando la cota inferior de la incertidumbre del modelo.",
-    balanced: "Maximiza log P + ½·log(retorno esperado): equilibra acierto y valor.",
-    value: "Solo selecciones con EV positivo; maximiza el retorno esperado de la combinada.",
-    min_legs: "Busca el menor número de selecciones que alcanza la cuota y, entre ellas, la de mayor probabilidad.",
+    conservative: "La combinación con más probabilidad de acertar, calculada con la estimación más prudente del modelo.",
+    balanced: "Equilibra la probabilidad de acertar con el valor de las cuotas.",
+    value: "Solo selecciones donde la cuota paga más de lo justo; busca la mayor ganancia esperada.",
+    min_legs: "Llega a la cuota con el menor número de selecciones y, entre esas, la más probable.",
   };
   const alternatives: Record<string, any> = {};
   const history = load<any[]>("parlays", []);
@@ -341,6 +343,18 @@ export async function route(path: string, init: { method?: string; json?: any } 
     const [st, c] = await Promise.all([file("status.json"), ctx()]);
     const auth = new Set(c.ops.filter((o) => o.status === "authorized").map((o) => o.key));
     return { ...st, counts: { ...st.counts, colombian_quotes: c.quotes.filter((x: any) => auth.has(x.operator)).length, manual_quotes: c.manual.length } };
+  }
+  if (p === "/sports") {
+    const c = await ctx();
+    const now = Date.now();
+    const out: Record<string, { upcoming: number; with_colombian_odds: number }> = {};
+    for (const sp of ["football", "basketball", "tennis", "baseball", "volleyball"]) out[sp] = { upcoming: 0, with_colombian_odds: 0 };
+    const withOdds = new Set(c.coQuotes.map((x: any) => x.event_id));
+    c.events.events.forEach((e: any) => {
+      if (e.status !== "scheduled" || new Date(e.start_time).getTime() < now || !out[e.sport]) return;
+      out[e.sport].upcoming++; if (withOdds.has(e.id)) out[e.sport].with_colombian_odds++;
+    });
+    return { sports: out };
   }
   if (p === "/events/days") {
     const c = await ctx();

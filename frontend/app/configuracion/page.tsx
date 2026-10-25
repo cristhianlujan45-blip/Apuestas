@@ -197,7 +197,7 @@ function DeviceOdds() {
               <td className="num">{m.odds}</td><td className="num text-ink-muted">{bogota(m.captured_at, false)}</td><td><button className="text-xs text-critical" onClick={() => del(m.id)}>Borrar</button></td></tr>
           ))}</tbody></table>
       )}
-      <p className="mt-2 text-[11px] text-ink-muted">Las cuotas con más de 15 minutos se marcan como desactualizadas y no entran en combinadas ni surebets. Vuelva a copiarlas antes de decidir.</p>
+      <p className="mt-2 text-[11px] text-ink-muted">Las cuotas que usted carga valen 2 horas; después se marcan como desactualizadas y no entran en combinadas ni surebets. Vuelva a cargarlas antes de decidir.</p>
     </Card>
   );
 }

@@ -95,7 +95,9 @@ export default function EventView({ id }: { id: string }) {
             <p className="mt-2 text-[11px] text-ink-muted">Versión: {data.model_version}</p>
           </Card>
           <Card title="Modelos individuales" className="lg:col-span-2">
-            <table className="data">
+            <details>
+            <summary className="cursor-pointer text-sm text-ink-2">Ver qué dice cada uno de los {Object.keys(m.components || {}).length} modelos y su peso</summary>
+            <table className="data mt-2">
               <thead><tr><th>Modelo</th><th>Peso</th><th className="w-72">L / E / V</th></tr></thead>
               <tbody>
                 {Object.entries(m.components || {}).map(([k, v]: any) => (
@@ -104,6 +106,7 @@ export default function EventView({ id }: { id: string }) {
                 ))}
               </tbody>
             </table>
+            </details>
             {m.data_quality?.issues?.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-warning">{m.data_quality.issues.map((i: string) => <li key={i}>{i}</li>)}</ul>}
           </Card>
         </div>

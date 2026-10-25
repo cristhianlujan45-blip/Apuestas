@@ -25,10 +25,10 @@ LABELS = {
     "D": "Menor número de selecciones",
 }
 MODE_EXPLANATION = {
-    "conservative": "Maximiza la probabilidad conjunta usando la cota inferior de la incertidumbre del modelo.",
-    "balanced": "Maximiza log P + ½·log(retorno esperado): equilibra acierto y valor.",
-    "value": "Solo selecciones con EV positivo; maximiza el retorno esperado de la combinada.",
-    "min_legs": "Busca el menor número de selecciones que alcanza la cuota y, entre ellas, la de mayor probabilidad.",
+    "conservative": "La combinación con más probabilidad de acertar, calculada con la estimación más prudente del modelo.",
+    "balanced": "Equilibra la probabilidad de acertar con el valor de las cuotas.",
+    "value": "Solo selecciones donde la cuota paga más de lo justo; busca la mayor ganancia esperada.",
+    "min_legs": "Llega a la cuota con el menor número de selecciones y, entre esas, la más probable.",
 }
 
 

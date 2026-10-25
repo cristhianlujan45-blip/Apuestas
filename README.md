@@ -13,6 +13,7 @@ cuotas y **PARLAY AI**, un optimizador de combinadas con la función **BUSCAR MI
 | Operadores (Coljuegos) | Registro verificado de los 14 operadores vigentes. Se reverifica cada semana contra la página oficial y genera alertas si un operador desaparece. |
 | Comparador de cuotas | Mejor cuota por selección, operador que la ofrece, diferencia entre casas, margen de cada operador, evolución temporal y hora de consulta. |
 | Motor predictivo | Poisson, Dixon-Coles bayesiano, Poisson bivariado, Elo, Glicko-2, LogReg, Random Forest, LightGBM, XGBoost, CatBoost y MLP (PyTorch), combinados en un ensemble validado en el tiempo. |
+| Multideporte | Combinadas con varios deportes en la misma casa. Baloncesto, tenis, béisbol y voleibol llegan con el feed multideporte (`ODDS_API_NET_KEY`); sin modelo propio entrenado se valoran con el consenso sin margen de las casas. |
 | Otros deportes | Baloncesto (ORtg/DRtg, pace, Four Factors, props de jugador), tenis (Elo por superficie + Markov saque/resto), béisbol y voleibol. |
 | Directo | Actualización bayesiana con minuto, marcador, expulsiones y xG o tiros. Se emite por WebSocket. |
 | Monte Carlo | Miles de escenarios por evento: distribuciones, intervalos de incertidumbre (aleatoria y de parámetros) y mercados conjuntos. |
@@ -95,6 +96,9 @@ Lo que dicen las validaciones con datos reales:
   - Por eso la matriz de goles se ajusta a la cuota de más/menos del mercado. El peso lo elige la
     validación; hoy es casi todo mercado.
   - Las señales de valor salen de diferencias de precio entre casas, no de que el modelo «sepa más».
+- En hándicap asiático la distribución de márgenes también se ajusta a la línea del mercado (sin
+  tocar el 1X2): el modelo infravaloraba las goleadas de los grandes favoritos y eso aparecía como
+  valor falso.
 - En córners y tarjetas el modelo por equipo mejora un 6 % la desviación frente a la media de la
   liga en córners por equipo. En el total de córners queda prácticamente igual que la media.
 

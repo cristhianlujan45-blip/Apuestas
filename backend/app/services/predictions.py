@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..engine.football.engine import LEAGUE_TO_GROUP, FootballEngine, FootballPrediction
 from ..engine.football.live import LiveState, live_outcomes
-from ..engine.markets import Outcomes, Selection, UnsupportedMarket, price
+from ..engine.markets import LegPricing, Outcomes, Selection, UnsupportedMarket, price
+from ..engine.odds_math import devig
 from ..engine.montecarlo import matrix_outcomes, probability_interval
 from ..models import Event, EventStats, Operator, Prediction
 from ..names import similarity
@@ -92,9 +93,72 @@ def _reference_ou25(db: Session, ev: Event) -> tuple[float, float] | None:
     return None
 
 
+def _reference_ah(db: Session, ev: Event) -> tuple[float, float, float] | None:
+    """(línea del local, cuota local, cuota visitante) del hándicap asiático de referencia."""
+    quotes = [q for q in latest_quotes(db, [ev.id], ["pinnacle", "intl_consensus"]) if q.market_key == "asian_handicap"
+              and q.line is not None]
+    for op in ("pinnacle", "intl_consensus"):
+        home = [q for q in quotes if q.operator_key == op and q.selection == "home"]
+        for h in home:
+            away = next((q for q in quotes if q.operator_key == op and q.selection == "away"
+                         and abs(q.line + h.line) < 1e-9), None)
+            if away:
+                return h.line, h.odds, away.odds
+    return None
+
+
 def _latest_live_stats(db: Session, ev: Event) -> dict:
     st = db.scalars(select(EventStats).where(EventStats.event_id == ev.id).order_by(EventStats.captured_at.desc())).first()
     return st.stats if st else {}
+
+
+MARKET_PAIRS = {"moneyline": ("home", "away"), "total_points": ("over", "under"), "total_runs": ("over", "under"),
+                "total_games": ("over", "under"), "total_sets": ("over", "under"), "spread": ("home", "away")}
+
+
+def _market_candidates(ev: Event, quotes: list) -> list[Candidate]:
+    """Candidatos valorados con el consenso sin margen de las casas (deportes sin modelo entrenado).
+
+    Solo mercados de dos resultados sin empate posible (líneas .5 y ganador). La probabilidad es la
+    mediana de las probabilidades sin margen de cada casa; el valor aparece cuando una casa paga más
+    que ese consenso (comparar precios), no porque un modelo «sepa más».
+    """
+    from statistics import median
+
+    books: dict[tuple, dict[str, dict[str, object]]] = {}
+    for q in quotes:
+        pair = MARKET_PAIRS.get(q.market_key)
+        if not pair or q.period != "ft" or q.player or q.selection not in pair:
+            continue
+        line = q.line
+        if line is not None and abs(line - round(line)) < 1e-9:
+            continue  # línea entera: puede haber devolución
+        gl = None if line is None else (line if q.market_key != "spread" or q.selection == "home" else -line)
+        books.setdefault((q.market_key, gl), {}).setdefault(q.operator_key, {})[q.selection] = q
+    out = []
+    for (market, _), by_op in books.items():
+        pair = MARKET_PAIRS[market]
+        fair = {s: [] for s in pair}
+        for sel in by_op.values():
+            if all(s in sel for s in pair):
+                ps = devig([sel[s].odds for s in pair], "power")
+                for s, p in zip(pair, ps):
+                    fair[s].append(float(p))
+        if not all(fair.values()):
+            continue
+        n_books = len(fair[pair[0]])
+        for sel in by_op.values():
+            for s, q in sel.items():
+                p = median(fair[s])
+                selection = quote_selection(q)
+                out.append(Candidate(
+                    event_id=ev.id, event_label=ev.label, sport=ev.sport,
+                    competition=ev.competition.name if ev.competition else None, start_time=aware(ev.start_time),
+                    selection=selection, selection_label=selection.describe(ev.home.name, ev.away.name),
+                    operator_key=q.operator_key, odds=q.odds, captured_at=aware(q.captured_at),
+                    pricing=LegPricing(p, 0.0, 0.0, 0.0, 1 - p), p_low=None, p_high=None,
+                    data_sufficient=n_books >= 2, is_live=ev.status == "live", source="mercado"))
+    return out
 
 
 def model_event(db: Session, ev: Event, n_draws: int = 120) -> EventModel:
@@ -105,7 +169,8 @@ def model_event(db: Session, ev: Event, n_draws: int = 120) -> EventModel:
         group, home, away = _football_names(eng, ev)
         league = next((lg for lg, g in LEAGUE_TO_GROUP.items() if g == group), group or "UNK")
         pred: FootballPrediction = eng.predict(league, home, away, aware(ev.start_time), _reference_1x2(db, ev),
-                                               n_draws=n_draws, market_totals=_reference_ou25(db, ev))
+                                               n_draws=n_draws, market_totals=_reference_ou25(db, ev),
+                                               market_ah=_reference_ah(db, ev))
         avail = (ev.result_detail or {}).get("availability")
         if avail:
             from ..engine.football.engine import apply_availability
@@ -259,6 +324,13 @@ def build_candidates(db: Session, events: list[Event] | None = None, include_liv
         em = cache.get(ev.id) or model_event(db, ev)
         cache[ev.id] = em
         if em.outcomes is None:
+            if ev.sport != "football":
+                # Sin modelo propio: probabilidad del mercado (consenso sin margen de las casas)
+                n0 = len(cands)
+                cands.extend(_market_candidates(ev, qs))
+                if len(cands) > n0:
+                    report["market_only"] = report.get("market_only", 0) + 1
+                    continue
             report["no_model"][ev.sport] = em.reason
             continue
         report["events_modeled"] += 1

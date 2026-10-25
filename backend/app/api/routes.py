@@ -153,6 +153,20 @@ def _prematch(db: Session, events: list[Event]) -> dict[int, dict]:
     return out
 
 
+@router.get("/sports")
+def sports_available(db: Session = Depends(get_db)) -> dict:
+    """Partidos por jugar y con cuotas colombianas por deporte (para mostrar qué deportes tienen datos)."""
+    now = datetime.now(timezone.utc)
+    authorized = select(Operator.key).where(Operator.status == "authorized")
+    up = dict(db.execute(select(Event.sport, func.count(Event.id)).where(Event.status == "scheduled", Event.start_time >= now)
+                         .group_by(Event.sport)).all())
+    with_odds = dict(db.execute(select(Event.sport, func.count(func.distinct(Event.id))).join(OddsQuote, OddsQuote.event_id == Event.id)
+                                .where(Event.status == "scheduled", Event.start_time >= now, OddsQuote.operator_key.in_(authorized))
+                                .group_by(Event.sport)).all())
+    return {"sports": {sp: {"upcoming": up.get(sp, 0), "with_colombian_odds": with_odds.get(sp, 0)}
+                       for sp in ("football", "basketball", "tennis", "baseball", "volleyball")}}
+
+
 @router.get("/events/days")
 def event_days(sport: str | None = None, db: Session = Depends(get_db)) -> dict:
     """Días (hora de Colombia) con partidos en la base: pasados recientes y próximos."""

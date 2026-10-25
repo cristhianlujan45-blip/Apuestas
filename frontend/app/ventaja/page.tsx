@@ -11,7 +11,7 @@ export default function Edge() {
   const value = useApi("/value?min_edge=0.02", [], 120000);
   return (
     <div className="space-y-4">
-      <PageHeader title="Ventaja frente a las casas"
+      <PageHeader title="Surebets y ventaja frente a las casas"
         subtitle="Tres fuentes de ventaja medibles: arbitraje entre casas (beneficio garantizado), cuotas por encima de la probabilidad justa (valor esperado positivo) y elegir siempre la casa que mejor paga. Nada de esto garantiza ganancias: las cuotas cambian y las casas pueden limitar cuentas." />
       <div className="grid gap-3 md:grid-cols-3">
         <Card title="1 · Surebets (arbitraje)"><p className="text-xs text-ink-2">Si la suma de 1/cuota de todas las salidas, cada una en la casa que más paga, es menor que 1, repartir la inversión asegura ganancia sea cual sea el resultado.</p></Card>

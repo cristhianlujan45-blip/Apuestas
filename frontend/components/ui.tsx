@@ -106,10 +106,11 @@ export function ProbBar({ probs, labels }: { probs: { home: number; draw?: numbe
           <div key={p.k} style={{ width: `${p.v * 100}%`, background: p.c }} title={`${p.l}: ${pct(p.v)}`} />
         ))}
       </div>
-      <div className="mt-1 flex justify-between text-[11px] text-ink-2 num">
-        {parts.map((p) => (
-          <span key={p.k}>
-            <span className="inline-block h-2 w-2 rounded-sm align-middle" style={{ background: p.c }} /> {p.l} {pct(p.v, 0)}
+      <div className="mt-1 flex justify-between gap-2 text-[11px] text-ink-2 num">
+        {parts.map((p, i) => (
+          <span key={p.k} className={`flex min-w-0 items-center gap-1 ${i === parts.length - 1 ? "justify-end" : ""}`}>
+            <span className="inline-block h-2 w-2 shrink-0 rounded-sm" style={{ background: p.c }} />
+            <span className="truncate">{p.l}</span><span className="shrink-0">{pct(p.v, 0)}</span>
           </span>
         ))}
       </div>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, Empty, PageHeader, Stat, StatusBadge } from "@/components/ui";
 import { addBet, deleteBet, evaluate, loadBets, setManualResult, summary, type Bet, type Result } from "@/lib/bets";
 import { bogota, cop, odds, pct, signedPct } from "@/lib/format";
+import { api } from "@/lib/api";
 import { currentBankroll, loadBankroll, storeBankrollNow } from "@/lib/bankroll";
 
 const ST: Record<string, any> = { ganada: "good", perdida: "critical", pendiente: "info", nula: "info", parcial: "warning", "liquidar a mano": "warning" };
@@ -11,10 +12,12 @@ const ST: Record<string, any> = { ganada: "good", perdida: "critical", pendiente
 export default function MyBets() {
   const [bets, setBets] = useState<Bet[]>([]);
   const [results, setResults] = useState<Record<number, Result>>({});
+  const [ops, setOps] = useState<{ key: string; name: string }[]>([{ key: "betplay", name: "BetPlay" }]);
   const [f, setF] = useState({ operator: "betplay", description: "", stake_cop: 10000, odds: 2 });
   const reload = () => setBets(loadBets());
   useEffect(() => {
     reload();
+    api("/operators").then((d) => setOps(d.operators.filter((o: any) => o.status === "authorized"))).catch(() => {});
     import("@/lib/staticApi").then((m) => m.route("/results")).then((r) => {
       setResults(Object.fromEntries((r.results || []).map((x: Result) => [x.event_id, x])));
     }).catch(() => {});
@@ -37,7 +40,10 @@ export default function MyBets() {
       </div>
       <Card title="Registrar una apuesta simple o manual">
         <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-          <div><label className="label">Casa</label><input className="input" value={f.operator} onChange={(e) => setF({ ...f, operator: e.target.value })} /></div>
+          <div><label className="label">Casa</label>
+            <select className="input" value={f.operator} onChange={(e) => setF({ ...f, operator: e.target.value })}>
+              {ops.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
+            </select></div>
           <div className="col-span-2"><label className="label">Descripción</label><input className="input" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
           <div><label className="label">Inversión (COP)</label><input type="number" className="input" value={f.stake_cop} onChange={(e) => setF({ ...f, stake_cop: +e.target.value })} /></div>
           <div><label className="label">Cuota</label><input type="number" step="0.01" className="input" value={f.odds} onChange={(e) => setF({ ...f, odds: +e.target.value })} /></div>

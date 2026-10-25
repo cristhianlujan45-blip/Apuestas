@@ -212,6 +212,36 @@ def _synthetic_odds_history(seed: int = 3) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def test_multisport_parlay_with_market_consensus(client):
+    """Baloncesto sin modelo entrenado: se valora con el consenso sin margen y entra en combinadas mixtas."""
+    start = (datetime.now(timezone.utc) + timedelta(hours=30)).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    rows = []
+    for home, away in (("Lakers", "Celtics"), ("Bulls", "Knicks")):
+        for op, (h, a) in (("betplay", (1.80, 2.00)), ("wplay", (1.95, 1.90)), ("rushbet", (1.78, 2.02))):
+            for sel, o in (("home", h), ("away", a)):
+                rows.append({"sport": "basketball", "competition": "NBA", "start_time": start, "home": home, "away": away,
+                             "operator": op, "market": "moneyline", "selection": sel, "odds": o})
+    anon = client.post("/api/odds/manual", json=rows)
+    if anon.status_code != 200:  # la importación puede exigir sesión
+        tok = client.post("/api/auth/register", json={"email": "m@b.co", "password": "secreta123", "birthdate": "1990-01-01",
+                                                      "accept_terms": True}).json()["token"]
+        anon = client.post("/api/odds/manual", json=rows, headers={"Authorization": f"Bearer {tok}"})
+    assert anon.status_code == 200 and anon.json()["imported"] == len(rows), anon.text
+    sp = client.get("/api/sports").json()["sports"]
+    assert sp["basketball"]["upcoming"] >= 2 and sp["basketball"]["with_colombian_odds"] >= 2
+    vb = client.get("/api/value?min_edge=0.0").json()["value_bets"]
+    bk = [v for v in vb if v["sport"] == "basketball"]
+    assert bk and all(v["operator"] == "wplay" and v["selection_key"].startswith("moneyline|home") for v in bk)
+    res = client.post("/api/parlay/search", json={"target_odds": 3.6, "min_odds": 3.3, "max_odds": 4.0, "min_legs": 2, "max_legs": 2,
+                                                  "risk": "high", "sports": ["basketball", "football"], "operators": ["wplay"],
+                                                  "max_hours_ahead": 48}).json()
+    alts = [a for a in res["alternatives"].values() if a["available"]]
+    assert alts, res["messages"]
+    # Al menos una alternativa mezcla deportes (fútbol + baloncesto en la misma casa)
+    assert any({l["sport"] for l in a["legs"]} == {"basketball", "football"} for a in alts), [[l["sport"] for l in a["legs"]] for a in alts]
+    assert all(len({l["operator"] for l in a["legs"]}) == 1 for a in alts)
+
+
 def test_agent_learns_picks_and_settles(client):
     from app.db import session_scope
     from app.models import AgentBet, Event

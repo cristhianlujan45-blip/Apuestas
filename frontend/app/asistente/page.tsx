@@ -32,7 +32,7 @@ export default function Assistant() {
     <div className="space-y-4">
       <PageHeader title="Asistente de IA deportiva" subtitle="Consulta los datos y modelos reales de la plataforma. Las probabilidades y cuotas que muestra provienen de las herramientas, nunca del modelo de lenguaje." />
       <Card>
-        <div className="mb-3 flex flex-wrap gap-1">{SUGGESTIONS.map((s) => <button key={s} className="tab text-xs" onClick={() => send(s)}>{s}</button>)}</div>
+        <div className="mb-3 flex flex-wrap gap-1">{SUGGESTIONS.map((s) => <button key={s} className="tab whitespace-normal border-line text-left text-xs" onClick={() => send(s)}>{s}</button>)}</div>
         <div className="max-h-[60vh] min-h-[300px] space-y-3 overflow-y-auto rounded-lg bg-page p-3">
           {msgs.map((m, i) => (
             <div key={i} className={`max-w-[90%] rounded-lg p-3 ${m.role === "user" ? "ml-auto bg-accent/20" : "bg-surface-2"}`}>

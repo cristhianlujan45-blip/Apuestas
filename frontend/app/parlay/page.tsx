@@ -1,15 +1,17 @@
 "use client";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge, Card, Disclaimer, Empty, ErrorBox, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { api } from "@/lib/api";
 import { addBet } from "@/lib/bets";
 import StakeHint from "@/components/StakeHint";
 import DayPicker, { dayLabel } from "@/components/DayPicker";
+import SportPicker from "@/components/SportPicker";
 import { bogota, cop, odds, pct, signedPct, SPORT_LABEL } from "@/lib/format";
 
-const PRESETS = [2, 3, 5, 10, 15, 20, 30, 50, 100];
-const SPORTS = ["football", "basketball", "tennis", "baseball", "volleyball"];
+const PRESETS = [2, 3, 5, 10, 20];
+const RISK_LABEL: Record<string, string> = { low: "bajo", medium: "medio", high: "alto" };
 const MODE_LABEL: Record<string, string> = { conservative: "Conservador", balanced: "Equilibrado", value: "Valor", min_legs: "Mínimas selecciones" };
 
 function sliderToOdds(v: number) {
@@ -28,7 +30,7 @@ function ParlayCard({ k, a, stake }: { k: string; a: any; stake: number }) {
   const v = a.validation;
   return (
     <Card title={`Parlay ${k} · ${a.label}`} right={a.reference ? <StatusBadge status="warning">Cuotas de referencia</StatusBadge> : v.valid ? <StatusBadge status="good">Validada</StatusBadge> : <StatusBadge status="warning">Revisar validación</StatusBadge>}>
-      {a.reference && <p className="mb-3 rounded-lg border border-warning/40 bg-warning/10 p-2 text-xs text-warning">Cuotas promedio de casas internacionales, no de una casa colombiana. Busque estas mismas selecciones en su casa y compare: si allá pagan menos, el valor esperado baja.</p>}
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div><div className="text-xs text-ink-muted">Operador</div><div className="font-semibold">{a.operator_name}</div></div>
         <div><div className="text-xs text-ink-muted">Cuota total</div><div className="text-2xl font-semibold num">{odds(a.total_odds)}</div></div>
@@ -39,7 +41,20 @@ function ParlayCard({ k, a, stake }: { k: string; a: any; stake: number }) {
           <StakeHint p={a.joint_probability} odds={a.total_odds} /></div>
       </div>
       <p className="mt-2 text-xs text-ink-muted">{a.explanation}</p>
-      <table className="data mt-3">
+      <ol className="mt-3 space-y-2 md:hidden">
+        {a.legs.map((l: any, i: number) => (
+          <li key={i} className="rounded-lg border border-line p-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0"><div className="text-sm font-medium">{l.selection}</div>
+                <div className="text-[11px] text-ink-muted">{l.event} · {SPORT_LABEL[l.sport]} · {bogota(l.start_time)}</div>
+                {l.components && <div className="text-[11px] text-warning">{l.same_event_note}</div>}</div>
+              <div className="shrink-0 text-right"><div className="text-lg font-semibold num">{odds(l.odds)}</div>
+                <div className="text-[11px] text-ink-2 num">{pct(l.probability)} · <span className={l.ev > 0 ? "text-good" : ""}>{signedPct(l.ev)}</span></div></div>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <table className="data mt-3 hidden md:table">
         <thead><tr><th>Evento</th><th>Selección</th><th>Cuota</th><th>Prob.</th><th>EV</th><th>Hora consulta</th></tr></thead>
         <tbody>
           {a.legs.map((l: any, i: number) => (
@@ -138,6 +153,7 @@ export default function ParlayPage() {
         markets: selMarkets.length ? selMarkets : null, allow_same_event: sameEvent, max_hours_ahead: days.length ? null : hours,
         use_reference: useRef, dates: days.length ? days : null,
       } }));
+      setTimeout(() => document.getElementById("resultados")?.scrollIntoView({ behavior: "smooth" }), 80);
     } catch (e) { setErr(e); setRes(null); } finally { setBusy(false); }
   };
   useEffect(() => {
@@ -147,55 +163,62 @@ export default function ParlayPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="PARLAY AI · BUSCAR MI CUOTA"
-        subtitle="Indique la cuota que quiere alcanzar. El sistema evalúa todas las selecciones con cuota de operadores autorizados, las valora con los modelos y resuelve de forma exacta qué combinación maximiza la probabilidad conjunta (o el valor esperado) dentro de la banda pedida." />
+      <PageHeader title="Buscar mi cuota"
+        subtitle="Elija la cuota total que quiere, el día y el deporte. La app arma las mejores combinadas en una sola casa y le explica la probabilidad estimada de cada una." />
       <div className="grid gap-4 xl:grid-cols-3">
-        <Card title="Cuota objetivo" className="xl:col-span-1">
+        <Card title="1 · Cuota que quiere" className="xl:col-span-1">
           <div className="flex items-baseline gap-3">
             <div className="text-5xl font-semibold num">{target.toFixed(2)}</div>
-            <input className="input w-24" value={manual} inputMode="decimal" aria-label="Cuota manual"
+            <input className="input w-24" value={manual} inputMode="decimal" aria-label="Escribir cuota"
               onChange={(e) => { setManual(e.target.value); const v = parseFloat(e.target.value.replace(",", ".")); if (v > 1.01 && v <= 1000) setTarget(v); }} />
           </div>
           <input type="range" min={0} max={1000} className="odds-slider mt-3" value={oddsToSlider(Math.min(Math.max(target, 1.5), 100))}
             onChange={(e) => { const v = sliderToOdds(+e.target.value); setTarget(v); setManual(String(v)); }} aria-label="Barra de cuota objetivo" />
-          <div className="mt-2 flex flex-wrap gap-1">
-            {PRESETS.map((p) => <button key={p} className={`tab num ${target === p ? "tab-active" : ""}`} onClick={() => { setTarget(p); setManual(String(p)); }}>{p.toFixed(2)}</button>)}
+          <div className="mt-2 grid grid-cols-5 gap-1">
+            {PRESETS.map((p) => <button key={p} className={`tab px-0 num ${target === p ? "tab-active" : ""}`} onClick={() => { setTarget(p); setManual(String(p)); }}>{p}</button>)}
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div><label className="label">Cuota mínima</label><input className="input" placeholder={(target * 0.9).toFixed(2)} value={minOdds} onChange={(e) => setMinOdds(e.target.value)} /></div>
-            <div><label className="label">Cuota máxima</label><input className="input" placeholder={(target * 1.15).toFixed(2)} value={maxOdds} onChange={(e) => setMaxOdds(e.target.value)} /></div>
-            <div><label className="label">Mín. selecciones</label><input type="number" min={1} max={15} className="input" value={minLegs} onChange={(e) => setMinLegs(+e.target.value)} /></div>
-            <div><label className="label">Máx. selecciones</label><input type="number" min={1} max={15} className="input" value={maxLegs} onChange={(e) => setMaxLegs(+e.target.value)} /></div>
-            <div><label className="label">Riesgo aceptado</label>
-              <select className="input" value={risk} onChange={(e) => setRisk(e.target.value as any)}>
-                <option value="low">Bajo (selecciones ≥ 55 %)</option><option value="medium">Medio (≥ 40 %)</option><option value="high">Alto (≥ 20 %)</option>
-              </select></div>
-            <div><label className="label">Horizonte (horas{days.length ? ", no aplica: eligió días" : ""})</label><input type="number" className="input" disabled={days.length > 0} value={hours} onChange={(e) => setHours(+e.target.value)} /></div>
-            <div className="col-span-2"><label className="label">Inversión (COP)</label><input type="number" className="input" value={stake} onChange={(e) => setStake(+e.target.value)} /></div>
-          </div>
+          <div className="mt-3"><label className="label">Cuánto quiere apostar (COP)</label><input type="number" className="input" value={stake} onChange={(e) => setStake(+e.target.value)} />
+            <p className="mt-1 text-[11px] text-ink-muted num">Si gana, recibiría unos {cop(stake * target)}</p></div>
         </Card>
-        <Card title="Filtros" className="xl:col-span-2">
-          <label className="label">¿Para qué día? (elija uno o varios; vacío = todos los próximos)</label>
-          <div className="mb-3"><DayPicker value={days} onChange={setDays} multiple futureOnly sport={sports.length === 1 ? sports[0] : undefined} />
-            {days.length > 0 && <p className="mt-1 text-xs text-ink-2">Buscando solo en: {days.map(dayLabel).join(", ")}</p>}</div>
-          <label className="label">Deportes (seleccione varios para parlays mixtos)</label>
-          <div className="mb-3 flex flex-wrap gap-1">{SPORTS.map((s) => <button key={s} className={`tab ${sports.includes(s) ? "tab-active" : ""}`} onClick={() => toggle(sports, setSports, s)}>{SPORT_LABEL[s]}</button>)}</div>
-          <label className="label">Operadores autorizados (vacío = todos)</label>
-          <div className="mb-3 flex flex-wrap gap-1">{operators.map((o) => <button key={o.key} className={`tab ${ops.includes(o.key) ? "tab-active" : ""}`} onClick={() => toggle(ops, setOps, o.key)}>{o.name}</button>)}</div>
-          <label className="label">Mercados (vacío = todos)</label>
-          <div className="mb-3 flex flex-wrap gap-1">{Object.entries(markets).filter(([, m]: any) => !sports.length || sports.includes(m.sport)).map(([k, m]: any) => <button key={k} className={`tab text-xs ${selMarkets.includes(k) ? "tab-active" : ""}`} onClick={() => toggle(selMarkets, setSelMarkets, k)}>{m.label}</button>)}</div>
-          <div className="flex flex-wrap gap-4 text-sm text-ink-2">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={useRef} onChange={(e) => setUseRef(e.target.checked)} /> Si no hay cuotas colombianas, usar cuotas de referencia internacionales (para verificar en su casa)</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={sameEvent} onChange={(e) => setSameEvent(e.target.checked)} /> Permitir mercados del mismo partido (solo casas que lo permiten; probabilidad conjunta simulada)</label>
-          </div>
-          <button className="btn-primary mt-4" onClick={search} disabled={busy}>{busy ? "Analizando…" : "BUSCAR MI CUOTA"}</button>
+        <Card title="2 · Día y deporte" className="xl:col-span-2">
+          <label className="label">¿Para qué día? Puede elegir varios</label>
+          <div className="mb-3"><DayPicker value={days} onChange={setDays} multiple futureOnly sport={sports.length === 1 ? sports[0] : undefined} /></div>
+          <label className="label">Deportes: elija varios para combinar deportes</label>
+          <div className="mb-3"><SportPicker value={sports} onChange={setSports} /></div>
+          <button className="btn-primary w-full justify-center py-3 text-base sm:w-auto" onClick={search} disabled={busy}>
+            <Search size={18} /> {busy ? "Buscando…" : `Buscar combinadas de cuota ${target.toFixed(2)}`}</button>
+          <p className="mt-2 text-[11px] text-ink-muted">
+            {days.length ? `Días: ${days.map(dayLabel).join(", ")}` : `Próximas ${hours} horas`} · {sports.length ? sports.map((x) => SPORT_LABEL[x]).join(" + ") : "todos los deportes"} · {minLegs}–{maxLegs} selecciones · riesgo {RISK_LABEL[risk]}
+          </p>
+          <details className="mt-3 rounded-lg border border-line p-3">
+            <summary className="cursor-pointer text-sm text-ink-2">Opciones avanzadas</summary>
+            <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+              <div><label className="label">Cuota mínima</label><input className="input" placeholder={(target * 0.9).toFixed(2)} value={minOdds} onChange={(e) => setMinOdds(e.target.value)} /></div>
+              <div><label className="label">Cuota máxima</label><input className="input" placeholder={(target * 1.15).toFixed(2)} value={maxOdds} onChange={(e) => setMaxOdds(e.target.value)} /></div>
+              <div><label className="label">Riesgo aceptado</label>
+                <select className="input" value={risk} onChange={(e) => setRisk(e.target.value as any)}>
+                  <option value="low">Bajo (cada selección ≥ 55 %)</option><option value="medium">Medio (≥ 40 %)</option><option value="high">Alto (≥ 20 %)</option>
+                </select></div>
+              <div><label className="label">Mín. selecciones</label><input type="number" min={1} max={15} className="input" value={minLegs} onChange={(e) => setMinLegs(+e.target.value)} /></div>
+              <div><label className="label">Máx. selecciones</label><input type="number" min={1} max={15} className="input" value={maxLegs} onChange={(e) => setMaxLegs(+e.target.value)} /></div>
+              <div><label className="label">Horizonte (horas){days.length ? " · no aplica" : ""}</label><input type="number" className="input" disabled={days.length > 0} value={hours} onChange={(e) => setHours(+e.target.value)} /></div>
+            </div>
+            <label className="label mt-3">Casas (vacío = todas)</label>
+            <div className="mb-3 flex flex-wrap gap-1">{operators.map((o) => <button key={o.key} className={`tab ${ops.includes(o.key) ? "tab-active" : ""}`} onClick={() => toggle(ops, setOps, o.key)}>{o.name}</button>)}</div>
+            <label className="label">Mercados (vacío = todos)</label>
+            <div className="mb-3 flex flex-wrap gap-1">{Object.entries(markets).filter(([, m]: any) => !sports.length || sports.includes(m.sport)).map(([k, m]: any) => <button key={k} className={`tab text-xs ${selMarkets.includes(k) ? "tab-active" : ""}`} onClick={() => toggle(selMarkets, setSelMarkets, k)}>{m.label}</button>)}</div>
+            <div className="space-y-2 text-sm text-ink-2">
+              <label className="flex items-start gap-2"><input className="mt-1" type="checkbox" checked={useRef} onChange={(e) => setUseRef(e.target.checked)} /> Si no hay cuotas colombianas, usar cuotas de referencia internacionales (para verificar en su casa)</label>
+              <label className="flex items-start gap-2"><input className="mt-1" type="checkbox" checked={sameEvent} onChange={(e) => setSameEvent(e.target.checked)} /> Permitir varios mercados del mismo partido (solo casas que lo permiten)</label>
+            </div>
+          </details>
         </Card>
       </div>
 
       {busy && <Loading label="Consultando eventos, valorando mercados con los modelos y optimizando…" />}
       <ErrorBox error={err} />
       {res && (
-        <>
+        <div id="resultados" className="scroll-mt-16 space-y-4">
           <Card title="Resumen del análisis">
             <div className="flex flex-wrap gap-2 text-xs">
               <Badge>Banda {odds(res.band[0])} – {odds(res.band[1])}</Badge>
@@ -205,7 +228,8 @@ export default function ParlayPage() {
               {res.reference ? <Badge>Cuotas de referencia internacional</Badge> : <Badge>{res.model_report.events_with_quotes} eventos con cuotas CO</Badge>}
               {!res.reference && <Badge>Operadores: {res.considered.operators.join(", ") || "ninguno"}</Badge>}
             </div>
-            {res.messages.map((m: string) => <p key={m} className="mt-2 text-sm text-warning">{m}</p>)}
+            {res.reference && <p className="mt-2 rounded-lg border border-warning/40 bg-warning/10 p-2 text-sm text-warning">Sin cuotas de casas colombianas para esta búsqueda: las combinadas usan cuotas de <b>referencia internacional</b>. Busque las mismas selecciones en su casa y compare; si allá pagan menos, el valor baja.</p>}
+            {res.messages.filter((m: string) => !m.includes("REFERENCIA")).map((m: string) => <p key={m} className="mt-2 text-sm text-ink-2">{m}</p>)}
             {res.model_report.events_with_quotes === 0 && <p className="mt-2 text-sm text-ink-2">Todavía no llegan cuotas de casas colombianas. Para recibirlas solas, el administrador debe crear el secreto gratuito <code>ODDSPAPI_KEY</code> (BetPlay y Rushbet). Mientras tanto puede cargar las cuotas de su casa con <Link className="text-accent underline" href="/captura">una foto</Link> o en Configuración → Mis cuotas.</p>}
             {Object.keys(res.considered.discarded || {}).length > 0 && (
               <details className="mt-2 text-xs text-ink-2"><summary className="cursor-pointer">Selecciones descartadas</summary>
@@ -214,7 +238,7 @@ export default function ParlayPage() {
             {res.modes_comparison.length > 0 && (
               <table className="data mt-3"><thead><tr><th>Parlay</th><th>Modo</th><th>Casa</th><th>Selecciones</th><th>Cuota</th><th>Prob. conjunta</th><th>EV</th></tr></thead>
                 <tbody>{res.modes_comparison.map((r: any) => (
-                  <tr key={r.parlay}><td>{r.parlay}</td><td>{MODE_LABEL[r.mode]}</td><td>{r.operator}</td><td className="num">{r.n_legs}</td><td className="num">{odds(r.total_odds)}</td><td className="num">{pct(r.joint_probability)}</td><td className="num">{signedPct(r.ev)}</td></tr>
+                  <tr key={r.parlay}><td>{r.parlay}</td><td>{MODE_LABEL[r.mode]}</td><td>{res.reference ? "Referencia" : r.operator}</td><td className="num">{r.n_legs}</td><td className="num">{odds(r.total_odds)}</td><td className="num">{pct(r.joint_probability)}</td><td className="num">{signedPct(r.ev)}</td></tr>
                 ))}</tbody></table>
             )}
           </Card>
@@ -222,7 +246,7 @@ export default function ParlayPage() {
             {["A", "B", "C", "D"].map((k) => <ParlayCard key={k} k={k} a={res.alternatives[k]} stake={stake} />)}
           </div>
           <Disclaimer />
-        </>
+        </div>
       )}
     </div>
   );
