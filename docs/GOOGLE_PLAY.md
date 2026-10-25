@@ -31,8 +31,8 @@ El flujo `.github/workflows/android.yml` compila el `.aab` firmado cuando existe
 8. **Versiones → Pruebas internas** → subir `apuestas-intel-co.aab` → revisar y publicar. Cuando
    funcione, promuévala a *Producción*.
 
-Cada compilación aumenta `versionCode` (número de ejecución del flujo), requisito de Play para
-aceptar una actualización.
+Cada compilación aumenta `versionCode` (100 + número de ejecución del flujo), requisito de Play
+para aceptar una actualización.
 
 ## Textos de la ficha
 

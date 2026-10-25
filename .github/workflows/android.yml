@@ -35,12 +35,12 @@ jobs:
       - name: Compilar APK (prueba) y, si hay clave privada, APK + AAB firmados para Google Play
         working-directory: frontend/android
         env:
-          APP_VERSION_CODE: ${{ github.run_number }}
-          APP_VERSION_NAME: 1.${{ github.run_number }}
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
+          # Google Play exige que versionCode siempre crezca (100 + número de ejecución)
+          export APP_VERSION_CODE=$((100 + GITHUB_RUN_NUMBER)) APP_VERSION_NAME="1.$GITHUB_RUN_NUMBER"
           mkdir -p ../dist
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
