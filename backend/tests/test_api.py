@@ -174,6 +174,23 @@ def test_stale_lines_and_reference_parlay(client):
                                                   "operators": ["codere"], "use_reference": False}).json()
     assert res["reference"] is False and not any(a["available"] for a in res["alternatives"].values())
 
+    # Filtro por día: el día del partido lo incluye, otro día lo excluye
+    day = client.get("/api/events/days").json()["days"]
+    assert day and all({"date", "count", "finished"} <= set(d) for d in day)
+    ev_day = next(e for e in client.get("/api/events?scope=upcoming").json()["events"] if e["id"] == eid)["start_time"]
+    from zoneinfo import ZoneInfo
+
+    d0 = datetime.fromisoformat(ev_day).astimezone(ZoneInfo("America/Bogota")).date()
+    on = client.get(f"/api/events?date={d0.isoformat()}").json()["events"]
+    assert any(e["id"] == eid for e in on)
+    off = client.get(f"/api/events?date={(d0 + timedelta(days=3)).isoformat()}").json()["events"]
+    assert all(e["id"] != eid for e in off)
+    base = {"target_odds": 1.6, "min_odds": 1.4, "max_odds": 1.8, "min_legs": 1, "max_legs": 1, "risk": "high", "operators": ["codere"]}
+    r_on = client.post("/api/parlay/search", json={**base, "dates": [d0.isoformat()]}).json()
+    assert any(a["available"] for a in r_on["alternatives"].values())
+    r_off = client.post("/api/parlay/search", json={**base, "dates": [(d0 + timedelta(days=3)).isoformat()]}).json()
+    assert not any(a["available"] for a in r_off["alternatives"].values())
+
     q = client.get("/api/quotes").json()["quotes"]
     assert q and all(x["operator"] not in ("pinnacle", "intl_consensus") for x in q)
 

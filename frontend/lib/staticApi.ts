@@ -171,6 +171,7 @@ const sim = (a: string, b: string) => {
   const inter = [...tx].filter((t) => ty.has(t)).length;
   return inter / new Set([...tx, ...ty]).size;
 };
+export const bogotaDate = (t: string | number | Date) => new Date(t).toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
 const within = (e: any, scope: string) => {
   const t = new Date(e.start_time).getTime(), now = Date.now();
   if (scope === "live") return e.status === "live";
@@ -341,13 +342,24 @@ export async function route(path: string, init: { method?: string; json?: any } 
     const auth = new Set(c.ops.filter((o) => o.status === "authorized").map((o) => o.key));
     return { ...st, counts: { ...st.counts, colombian_quotes: c.quotes.filter((x: any) => auth.has(x.operator)).length, manual_quotes: c.manual.length } };
   }
+  if (p === "/events/days") {
+    const c = await ctx();
+    const sport = q.get("sport");
+    const days: Record<string, { date: string; count: number; finished: number }> = {};
+    c.events.events.filter((e: any) => !sport || e.sport === sport).forEach((e: any) => {
+      const d = bogotaDate(e.start_time);
+      const r = (days[d] ||= { date: d, count: 0, finished: 0 });
+      r.count++; if (e.status === "finished") r.finished++;
+    });
+    return { days: Object.values(days).sort((a, b) => a.date.localeCompare(b.date)) };
+  }
   if (p === "/events") {
     const c = await ctx();
-    const scope = q.get("scope") || "upcoming", sport = q.get("sport");
+    const scope = q.get("scope") || "upcoming", sport = q.get("sport"), day = q.get("date");
     const counts: Record<string, Set<string>> = {};
     const auth = new Set(c.ops.filter((o) => o.status === "authorized").map((o) => o.key));
     c.quotes.forEach((x: any) => { if (auth.has(x.operator)) (counts[x.event_id] ||= new Set()).add(x.operator); });
-    let evs = c.events.events.filter((e: any) => within(e, scope) && (!sport || e.sport === sport));
+    let evs = c.events.events.filter((e: any) => (day ? bogotaDate(e.start_time) === day : within(e, scope)) && (!sport || e.sport === sport));
     if (scope === "finished") evs = evs.reverse();
     evs = evs.slice(0, +(q.get("limit") || 300)).map((e: any) => ({ ...e, colombian_operators: counts[e.id]?.size || 0 }));
     return { scope, events: evs };

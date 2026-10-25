@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 
 const NAV: { href: string; label: string; icon: ReactNode; group: string }[] = [
   { href: "/", label: "Dashboard", icon: <Gauge size={16} />, group: "Centro" },
-  { href: "/partidos", label: "Partidos de hoy", icon: <CalendarDays size={16} />, group: "Centro" },
+  { href: "/partidos", label: "Partidos por día", icon: <CalendarDays size={16} />, group: "Centro" },
   { href: "/directo", label: "En directo", icon: <Radio size={16} />, group: "Centro" },
   { href: "/proximos", label: "Próximos", icon: <Layers size={16} />, group: "Centro" },
   { href: "/ia-apuestas", label: "IA de apuestas (simulada)", icon: <Bot size={16} />, group: "Centro" },

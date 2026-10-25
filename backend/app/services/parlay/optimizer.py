@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from itertools import combinations
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -119,6 +120,8 @@ class ParlayRequest:
     same_day_only: bool = False
     max_hours_ahead: float | None = 72
     include_live: bool = False
+    # Días elegidos por el usuario (AAAA-MM-DD, hora de Colombia). Si hay días, no se aplica el horizonte.
+    dates: list[str] | None = None
     # Si no hay cuotas colombianas que cumplan los filtros, usar cuotas de referencia
     # internacionales (claramente señaladas) para que el usuario las verifique en su casa.
     use_reference: bool = True
@@ -306,6 +309,13 @@ class OptimizationResult:
     messages: list[str]
 
 
+BOGOTA = ZoneInfo("America/Bogota")
+
+
+def bogota_date(t: datetime) -> str:
+    return t.astimezone(BOGOTA).date().isoformat()
+
+
 def _limit(c: "Candidate", stale_seconds: int, live_stale_seconds: int) -> int:
     from ..odds import stale_limit
 
@@ -342,10 +352,13 @@ def filter_candidates(cands: list[Candidate], req: ParlayRequest, authorized: se
         if not c.is_live and c.start_time <= now:
             drop("evento ya iniciado")
             continue
-        if req.max_hours_ahead and (c.start_time - now).total_seconds() > req.max_hours_ahead * 3600:
+        if req.dates and bogota_date(c.start_time) not in req.dates:
+            drop("fuera de los días elegidos")
+            continue
+        if not req.dates and req.max_hours_ahead and (c.start_time - now).total_seconds() > req.max_hours_ahead * 3600:
             drop("fuera de la ventana temporal")
             continue
-        if req.same_day_only and c.start_time.astimezone().date() != now.astimezone().date():
+        if req.same_day_only and bogota_date(c.start_time) != bogota_date(now):
             drop("no es del mismo día")
             continue
         age = (now - c.captured_at).total_seconds()

@@ -128,10 +128,64 @@ def _event_query(scope: str, sport: str | None):
     return q
 
 
+def _bogota_day_bounds(day: str) -> tuple[datetime, datetime]:
+    from zoneinfo import ZoneInfo
+
+    start = datetime.fromisoformat(day).replace(tzinfo=ZoneInfo("America/Bogota"))
+    return start.astimezone(timezone.utc), (start + timedelta(days=1)).astimezone(timezone.utc)
+
+
+def _prematch(db: Session, events: list[Event]) -> dict[int, dict]:
+    """Última predicción inmutable registrada ANTES del inicio de cada partido."""
+    out: dict[int, dict] = {}
+    start = {e.id: aware(e.start_time) for e in events}
+    if not start:
+        return out
+    rows = db.execute(select(Prediction).where(Prediction.event_id.in_(list(start)), Prediction.kind == "prematch")
+                      .order_by(Prediction.created_at)).scalars()
+    for p in rows:
+        if aware(p.created_at) >= start[p.event_id]:
+            continue
+        probs = p.payload.get("probs_1x2") or p.payload.get("probs_moneyline")
+        if probs:
+            out[p.event_id] = {"probs": probs, "predicted_at": aware(p.created_at).isoformat(), "hash": p.hash[:16],
+                               "over_2_5": (p.payload.get("totals") or {}).get("over_2.5")}
+    return out
+
+
+@router.get("/events/days")
+def event_days(sport: str | None = None, db: Session = Depends(get_db)) -> dict:
+    """Días (hora de Colombia) con partidos en la base: pasados recientes y próximos."""
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(timezone.utc)
+    q = select(Event.start_time, Event.status).where(Event.start_time >= now - timedelta(days=21),
+                                                      Event.start_time <= now + timedelta(days=21))
+    if sport:
+        q = q.where(Event.sport == sport)
+    days: dict[str, dict] = {}
+    for st, status in db.execute(q):
+        d = aware(st).astimezone(ZoneInfo("America/Bogota")).date().isoformat()
+        row = days.setdefault(d, {"date": d, "count": 0, "finished": 0})
+        row["count"] += 1
+        row["finished"] += status == "finished"
+    return {"days": sorted(days.values(), key=lambda r: r["date"])}
+
+
 @router.get("/events")
 def list_events(scope: Literal["today", "live", "upcoming", "finished"] = "upcoming", sport: str | None = None,
-                with_model: bool = True, limit: int = Query(100, le=400), db: Session = Depends(get_db)) -> dict:
-    evs = list(db.scalars(_event_query(scope, sport).limit(limit)).unique())
+                with_model: bool = True, limit: int = Query(100, le=400), date: str | None = None,
+                db: Session = Depends(get_db)) -> dict:
+    if date:
+        lo, hi = _bogota_day_bounds(date)
+        q = (select(Event).options(joinedload(Event.home), joinedload(Event.away), joinedload(Event.competition))
+             .where(Event.start_time >= lo, Event.start_time < hi).order_by(Event.start_time))
+        if sport:
+            q = q.where(Event.sport == sport)
+        evs = list(db.scalars(q.limit(limit)).unique())
+    else:
+        evs = list(db.scalars(_event_query(scope, sport).limit(limit)).unique())
+    pre = _prematch(db, [e for e in evs if e.status == "finished"])
     authorized = {o.key for o in db.scalars(select(Operator).where(Operator.status == "authorized"))}
     counts = dict(db.execute(select(OddsQuote.event_id, func.count(func.distinct(OddsQuote.operator_key)))
                              .where(OddsQuote.event_id.in_([e.id for e in evs]),
@@ -141,7 +195,11 @@ def list_events(scope: Literal["today", "live", "upcoming", "finished"] = "upcom
     for ev in evs:
         d = event_dict(ev)
         d["colombian_operators"] = counts.get(ev.id, 0)
-        if with_model:
+        if ev.status == "finished":
+            # Partido jugado: se muestra lo que el modelo dijo ANTES, no un recálculo posterior
+            d["prematch"] = pre.get(ev.id)
+            d["probs"] = (pre.get(ev.id) or {}).get("probs")
+        elif with_model:
             em = predictions.model_event(db, ev, n_draws=0)
             d["probs"] = em.summary.get("probs") or _ml_probs(em)
             d["live"] = em.summary.get("live")
@@ -149,7 +207,7 @@ def list_events(scope: Literal["today", "live", "upcoming", "finished"] = "upcom
             d["data_sufficient"] = em.sufficient
             d["model_note"] = em.reason
         out.append(d)
-    return {"scope": scope, "events": out}
+    return {"scope": "day" if date else scope, "date": date, "events": out}
 
 
 def _ml_probs(em) -> dict | None:
@@ -375,6 +433,7 @@ class ParlayIn(BaseModel):
     max_hours_ahead: float | None = 72
     include_live: bool = False
     use_reference: bool = True
+    dates: list[str] | None = None
 
 
 @router.post("/parlay/search")

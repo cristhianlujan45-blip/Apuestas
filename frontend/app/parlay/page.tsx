@@ -5,6 +5,7 @@ import { Badge, Card, Disclaimer, Empty, ErrorBox, Loading, PageHeader, StatusBa
 import { api } from "@/lib/api";
 import { addBet } from "@/lib/bets";
 import StakeHint from "@/components/StakeHint";
+import DayPicker, { dayLabel } from "@/components/DayPicker";
 import { bogota, cop, odds, pct, signedPct, SPORT_LABEL } from "@/lib/format";
 
 const PRESETS = [2, 3, 5, 10, 15, 20, 30, 50, 100];
@@ -113,8 +114,8 @@ export default function ParlayPage() {
   const [markets, setMarkets] = useState<Record<string, any>>({});
   const [selMarkets, setSelMarkets] = useState<string[]>([]);
   const [sameEvent, setSameEvent] = useState(false);
-  const [sameDay, setSameDay] = useState(false);
   const [useRef, setUseRef] = useState(true);
+  const [days, setDays] = useState<string[]>([]);
   const [hours, setHours] = useState(72);
   const [stake, setStake] = useState(10000);
   const [res, setRes] = useState<any>(null);
@@ -134,8 +135,8 @@ export default function ParlayPage() {
       setRes(await api("/parlay/search", { method: "POST", json: {
         target_odds: target, min_odds: minOdds ? +minOdds : null, max_odds: maxOdds ? +maxOdds : null,
         min_legs: minLegs, max_legs: maxLegs, risk, sports: sports.length ? sports : null, operators: ops.length ? ops : null,
-        markets: selMarkets.length ? selMarkets : null, allow_same_event: sameEvent, same_day_only: sameDay, max_hours_ahead: hours,
-        use_reference: useRef,
+        markets: selMarkets.length ? selMarkets : null, allow_same_event: sameEvent, max_hours_ahead: days.length ? null : hours,
+        use_reference: useRef, dates: days.length ? days : null,
       } }));
     } catch (e) { setErr(e); setRes(null); } finally { setBusy(false); }
   };
@@ -169,11 +170,14 @@ export default function ParlayPage() {
               <select className="input" value={risk} onChange={(e) => setRisk(e.target.value as any)}>
                 <option value="low">Bajo (selecciones ≥ 55 %)</option><option value="medium">Medio (≥ 40 %)</option><option value="high">Alto (≥ 20 %)</option>
               </select></div>
-            <div><label className="label">Horizonte (horas)</label><input type="number" className="input" value={hours} onChange={(e) => setHours(+e.target.value)} /></div>
+            <div><label className="label">Horizonte (horas{days.length ? ", no aplica: eligió días" : ""})</label><input type="number" className="input" disabled={days.length > 0} value={hours} onChange={(e) => setHours(+e.target.value)} /></div>
             <div className="col-span-2"><label className="label">Inversión (COP)</label><input type="number" className="input" value={stake} onChange={(e) => setStake(+e.target.value)} /></div>
           </div>
         </Card>
         <Card title="Filtros" className="xl:col-span-2">
+          <label className="label">¿Para qué día? (elija uno o varios; vacío = todos los próximos)</label>
+          <div className="mb-3"><DayPicker value={days} onChange={setDays} multiple futureOnly sport={sports.length === 1 ? sports[0] : undefined} />
+            {days.length > 0 && <p className="mt-1 text-xs text-ink-2">Buscando solo en: {days.map(dayLabel).join(", ")}</p>}</div>
           <label className="label">Deportes (seleccione varios para parlays mixtos)</label>
           <div className="mb-3 flex flex-wrap gap-1">{SPORTS.map((s) => <button key={s} className={`tab ${sports.includes(s) ? "tab-active" : ""}`} onClick={() => toggle(sports, setSports, s)}>{SPORT_LABEL[s]}</button>)}</div>
           <label className="label">Operadores autorizados (vacío = todos)</label>
@@ -181,7 +185,6 @@ export default function ParlayPage() {
           <label className="label">Mercados (vacío = todos)</label>
           <div className="mb-3 flex flex-wrap gap-1">{Object.entries(markets).filter(([, m]: any) => !sports.length || sports.includes(m.sport)).map(([k, m]: any) => <button key={k} className={`tab text-xs ${selMarkets.includes(k) ? "tab-active" : ""}`} onClick={() => toggle(selMarkets, setSelMarkets, k)}>{m.label}</button>)}</div>
           <div className="flex flex-wrap gap-4 text-sm text-ink-2">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={sameDay} onChange={(e) => setSameDay(e.target.checked)} /> Solo partidos de hoy</label>
             <label className="flex items-center gap-2"><input type="checkbox" checked={useRef} onChange={(e) => setUseRef(e.target.checked)} /> Si no hay cuotas colombianas, usar cuotas de referencia internacionales (para verificar en su casa)</label>
             <label className="flex items-center gap-2"><input type="checkbox" checked={sameEvent} onChange={(e) => setSameEvent(e.target.checked)} /> Permitir mercados del mismo partido (solo casas que lo permiten; probabilidad conjunta simulada)</label>
           </div>
@@ -196,6 +199,7 @@ export default function ParlayPage() {
           <Card title="Resumen del análisis">
             <div className="flex flex-wrap gap-2 text-xs">
               <Badge>Banda {odds(res.band[0])} – {odds(res.band[1])}</Badge>
+              {res.request?.dates?.length > 0 && <Badge>Días: {res.request.dates.map(dayLabel).join(", ")}</Badge>}
               <Badge>{res.considered.candidates_in} selecciones valoradas</Badge>
               <Badge>{res.considered.candidates_used} cumplen filtros</Badge>
               {res.reference ? <Badge>Cuotas de referencia internacional</Badge> : <Badge>{res.model_report.events_with_quotes} eventos con cuotas CO</Badge>}

@@ -1,22 +1,46 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import DayPicker, { dayLabel, todayBogota } from "./DayPicker";
 import EventTable from "./EventTable";
 import { Card, ErrorBox, Loading, PageHeader } from "./ui";
 import { SPORT_LABEL } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
-export default function EventsPage({ scope, title, subtitle }: { scope: "today" | "upcoming" | "finished"; title: string; subtitle: string }) {
+export default function EventsPage({ scope, title, subtitle }: { scope: "today" | "upcoming" | "finished" | "day"; title: string; subtitle: string }) {
   const [sport, setSport] = useState("");
-  const { data, error, loading } = useApi(`/events?scope=${scope}&limit=300${sport ? `&sport=${sport}` : ""}`, [sport], 120000);
+  const [day, setDay] = useState<string[]>([]);
+  useEffect(() => {
+    if (scope !== "day") return;
+    const q = new URLSearchParams(window.location.search).get("dia");
+    setDay([q || todayBogota()]);
+  }, [scope]);
+  const path = scope === "day"
+    ? (day[0] ? `/events?date=${day[0]}&limit=400${sport ? `&sport=${sport}` : ""}` : null)
+    : `/events?scope=${scope}&limit=300${sport ? `&sport=${sport}` : ""}`;
+  const { data, error, loading } = useApi(path, [path], 120000);
+  const evs = data?.events || [];
+  const finished = evs.filter((e: any) => e.status === "finished");
+  const checked = finished.filter((e: any) => e.prematch?.probs && e.home_score != null);
+  const hits = checked.filter((e: any) => {
+    const p = e.prematch.probs, pred = Object.keys(p).reduce((a, b) => (p[a] >= p[b] ? a : b));
+    const act = e.home_score > e.away_score ? "home" : e.home_score < e.away_score ? "away" : "draw";
+    return pred === act;
+  }).length;
   return (
-    <div>
-      <PageHeader title={title} subtitle={subtitle} right={
+    <div className="space-y-4">
+      <PageHeader title={scope === "day" && day[0] ? `${title} · ${dayLabel(day[0])}` : title} subtitle={subtitle} right={
         <div className="flex flex-wrap gap-1">
           {["", "football", "basketball", "tennis", "baseball", "volleyball"].map((s) => (
             <button key={s} onClick={() => setSport(s)} className={`tab ${sport === s ? "tab-active" : ""}`}>{s ? SPORT_LABEL[s] : "Todos"}</button>
           ))}
         </div>} />
-      <Card>{loading && !data ? <Loading /> : error ? <ErrorBox error={error} /> : <EventTable events={data?.events || []} />}</Card>
+      {scope === "day" && (
+        <Card title="Elija el día">
+          <DayPicker value={day} onChange={setDay} sport={sport || undefined} />
+          {checked.length > 0 && <p className="mt-2 text-sm text-ink-2 num">Ese día el modelo acertó el ganador en <b className="text-ink">{hits} de {checked.length}</b> partidos ({Math.round((hits / checked.length) * 100)} %), según lo que predijo antes de cada partido.</p>}
+        </Card>
+      )}
+      <Card>{loading && !data ? <Loading /> : error ? <ErrorBox error={error} /> : <EventTable events={evs} empty="No hay partidos ese día en los datos disponibles." />}</Card>
     </div>
   );
 }

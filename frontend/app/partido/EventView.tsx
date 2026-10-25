@@ -68,6 +68,14 @@ export default function EventView({ id }: { id: string }) {
           {ev.home_score != null && <b className="ml-2 text-ink">{ev.home_score}-{ev.away_score}</b>}</>}
         right={data.data_sufficient ? <StatusBadge status="good">Datos suficientes</StatusBadge> : <StatusBadge status="warning">Datos limitados</StatusBadge>} />
       {data.model_note && <Empty>{data.model_note}</Empty>}
+      {data.prematch?.probs && (
+        <Card title="Lo que dijo el modelo antes del partido">
+          <ProbBar probs={data.prematch.probs} labels={[ev.home, "Empate", ev.away]} />
+          <p className="mt-2 text-xs text-ink-muted num">Registrada {bogota(data.prematch.predicted_at)} · código {data.prematch.hash}
+            {data.prematch.over_2_5 != null && <> · más de 2.5 goles: {pct(data.prematch.over_2_5)}</>}
+            {ev.home_score != null && <> · resultado final <b className="text-ink">{ev.home_score}-{ev.away_score}</b></>}</p>
+        </Card>
+      )}
 
       {m.probs && (
         <div className="grid gap-4 lg:grid-cols-3">

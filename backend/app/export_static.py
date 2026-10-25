@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import math
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -64,9 +64,20 @@ def export(db: Session, out: Path) -> dict:
     # Eventos: hoy, directo y próximos (sin duplicados)
     seen: dict[int, dict] = {}
     for scope in ("live", "today", "upcoming"):
-        for e in R.list_events(scope=scope, sport=None, with_model=True, limit=400, db=db)["events"]:
+        for e in R.list_events(scope=scope, sport=None, with_model=True, limit=400, date=None, db=db)["events"]:
             seen.setdefault(e["id"], e)
-    events = sorted(seen.values(), key=lambda e: e["start_time"])
+    # Terminados de los últimos 14 días, con la predicción sellada antes del inicio
+    cutoff = (now - timedelta(days=14)).isoformat()
+    finished: dict[int, dict] = {}
+    for e in R.list_events(scope="finished", sport=None, with_model=False, limit=400, date=None, db=db)["events"]:
+        if e["start_time"] >= cutoff and e["id"] not in seen:
+            finished[e["id"]] = e
+    events = sorted([*seen.values(), *finished.values()], key=lambda e: e["start_time"])
+    for eid, e in finished.items():
+        _write(out / "events" / f"{eid}.json", {
+            "event": e, "model": {}, "prematch": e.get("prematch"), "markets": [], "margins": [], "operators_with_quotes": [],
+            "data_sufficient": True, "matrix": None, "simulation": None, "histories": {},
+            "model_note": "Partido terminado: se muestra la predicción registrada antes del inicio, no un recálculo."})
 
     # Detalle por evento (mercados valorados, simulación, matriz, historial)
     evs = {e.id: e for e in db.scalars(select(Event).where(Event.id.in_(list(seen)))

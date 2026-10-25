@@ -17,7 +17,8 @@ cuotas y **PARLAY AI**, un optimizador de combinadas con la función **BUSCAR MI
 | Directo | Actualización bayesiana con minuto, marcador, expulsiones y xG o tiros. Se emite por WebSocket. |
 | Monte Carlo | Miles de escenarios por evento: distribuciones, intervalos de incertidumbre (aleatoria y de parámetros) y mercados conjuntos. |
 | Detector de valor | Probabilidad implícita, margen, probabilidad propia, cuota justa, EV y Kelly fraccional. |
-| PARLAY AI / BUSCAR MI CUOTA | Mochila por grupos exacta en log-cuotas. Genera los Parlays **A** (mayor probabilidad), **B** (equilibrio), **C** (mejor EV) y **D** (menos selecciones), siempre por operador, y los compara entre casas. |
+| Partidos por día | Elija el día (pasados recientes y próximos) para ver los partidos con probabilidades, goles esperados y casas con cuota. En los días jugados se muestra la predicción sellada antes del partido y si acertó. |
+| PARLAY AI / BUSCAR MI CUOTA | Mochila por grupos exacta en log-cuotas. Genera los Parlays **A** (mayor probabilidad), **B** (equilibrio), **C** (mejor EV) y **D** (menos selecciones), siempre por operador, y los compara entre casas. Puede limitar la búsqueda a los días que elija. |
 | Validación de combinadas | Encuentros confirmados, cuotas vigentes, duplicados, contradicciones, correlación del mismo partido, reglas del operador, cálculo de la cuota y suficiencia de datos. |
 | Calculadora COP | Retorno, ganancia, cuota necesaria (buscador inverso), inversión necesaria y control de capital. |
 | Historial y aprendizaje | Predicciones inmutables encadenadas por hash (y bloqueadas por trigger en PostgreSQL), con Brier, log loss, RPS, calibración, MAE/RMSE, ROI, detección de degradación, versionado y reentrenamiento controlado. |

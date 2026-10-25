@@ -165,7 +165,7 @@ export type Req = {
   target_odds: number; min_odds?: number | null; max_odds?: number | null; min_legs: number; max_legs: number;
   sports?: string[] | null; operators?: string[] | null; markets?: string[] | null; risk: "low" | "medium" | "high";
   allow_same_event?: boolean; same_day_only?: boolean; max_hours_ahead?: number | null; include_live?: boolean;
-  use_reference?: boolean;
+  use_reference?: boolean; dates?: string[] | null;
 };
 export const RISK = {
   low: { min_leg_prob: 0.55, min_edge: 0.02, max_negative_ev: 0.12 },
@@ -304,7 +304,8 @@ export function optimize(all: Cand[], req: Req, ops: OpInfo[], matrices: Record<
     if (req.markets?.length && !req.markets.includes(parseKey(c.selection_key).market)) return drop("mercado excluido"), false;
     if (c.is_live && !req.include_live) return drop("en directo excluido"), false;
     if (!c.is_live && st <= now) return drop("evento ya iniciado"), false;
-    if (req.max_hours_ahead && st - now > req.max_hours_ahead * 3600e3) return drop("fuera de la ventana temporal"), false;
+    if (req.dates?.length && !req.dates.includes(new Date(st).toLocaleDateString("en-CA", { timeZone: "America/Bogota" }))) return drop("fuera de los días elegidos"), false;
+    if (!req.dates?.length && req.max_hours_ahead && st - now > req.max_hours_ahead * 3600e3) return drop("fuera de la ventana temporal"), false;
     if (req.same_day_only && new Date(st).toLocaleDateString("es-CO", { timeZone: "America/Bogota" }) !== today) return drop("no es del mismo día"), false;
     const age = (now - new Date(c.captured_at).getTime()) / 1000;
     if (age > (c.is_live ? liveStaleSec : staleLimit(c.source, staleSec))) return drop("cuota desactualizada"), false;
