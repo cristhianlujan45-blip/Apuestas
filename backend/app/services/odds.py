@@ -49,12 +49,25 @@ def quote_selection(q: OddsQuote) -> Selection:
     return Selection(q.market_key, q.selection, q.line, q.player, q.period)
 
 
-def freshness(q: OddsQuote, now: datetime | None = None) -> dict:
+def stale_limit(source: str | None, live: bool, default: int | None = None) -> int:
+    """Antigüedad máxima según la fuente: los feeds en tiempo real caducan en minutos; las fuentes
+    de baja frecuencia (OddsPapi gratuito, cuotas cargadas a mano o por foto) duran más, siempre
+    mostrando la hora de consulta."""
     s = get_settings()
+    if live:
+        return s.live_odds_stale_after_seconds
+    if source == "oddspapi":
+        return int((s.oddspapi_min_hours + 1) * 3600)
+    if source in ("manual", "csv", "csv_import", "ocr"):
+        return 2 * 3600
+    return default if default is not None else s.odds_stale_after_seconds
+
+
+def freshness(q: OddsQuote, now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     ts = aware(q.provider_ts or q.captured_at)
     age = (now - aware(q.captured_at)).total_seconds()
-    limit = s.live_odds_stale_after_seconds if q.is_live else s.odds_stale_after_seconds
+    limit = stale_limit(q.source, q.is_live)
     return {"captured_at": aware(q.captured_at).isoformat(), "provider_ts": ts.isoformat(), "age_seconds": age,
             "stale": age > limit, "live": q.is_live}
 

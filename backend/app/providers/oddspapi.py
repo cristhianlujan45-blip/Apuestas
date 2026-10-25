@@ -29,8 +29,9 @@ CACHE = DATA_DIR / "raw" / "oddspapi"
 BASE = "https://api.oddspapi.io/v4"
 FOOTBALL = 10
 
-# Casas colombianas disponibles en OddsPapi → clave interna
-BOOKMAKERS = {"betplay": "betplay", "rushbet-co": "rushbet"}
+# Casas colombianas disponibles en OddsPapi → clave interna. Pinnacle viaja en la misma
+# petición (no gasta cupo) como referencia para detectar cuotas retrasadas.
+BOOKMAKERS = {"betplay": "betplay", "rushbet-co": "rushbet", "pinnacle": "pinnacle"}
 
 # Torneos de interés (nombre de categoría, nombre de torneo) en minúsculas
 WANTED = [

@@ -32,6 +32,13 @@ MODE_EXPLANATION = {
 }
 
 
+REFERENCE_STALE_SECONDS = 12 * 3600
+REFERENCE_NAME = "Referencia internacional (no es casa colombiana)"
+REFERENCE_NOTE = ("No hay cuotas de casas colombianas para estos filtros. Se usaron cuotas de REFERENCIA "
+                  "(promedio de casas internacionales): su casa puede pagar distinto. Verifique cada cuota "
+                  "antes de apostar o cárguela en «Cuotas desde foto» para revaluar la combinada.")
+
+
 def operator_comparison(sol: ParlaySolution, all_cands: list[Candidate], op_names: dict[str, str]) -> dict:
     """Para cada selección: cuota en cada operador consultado y total por operador."""
     index: dict[tuple, dict[str, Candidate]] = defaultdict(dict)
@@ -83,8 +90,20 @@ def search_my_odds(db: Session, req: ParlayRequest, user_id: int | None = None, 
     cands, outcomes, model_report = build_candidates(db, include_live=req.include_live)
     same_event_ok = {k: bool((o.capabilities or {}).get("same_event_parlays")) for k, o in ops.items()}
     max_legs = {k: (o.capabilities or {}).get("max_parlay_legs") for k, o in ops.items()}
-    result = optimize(cands, req, authorized, same_event_ok, max_legs, outcomes,
-                      stale_seconds=s.odds_stale_after_seconds)
+    stale = s.odds_stale_after_seconds
+    result = optimize(cands, req, authorized, same_event_ok, max_legs, outcomes, stale_seconds=stale)
+    reference = False
+    if req.use_reference and result.considered["candidates_used"] == 0:
+        ref_cands, ref_outcomes, _ = build_candidates(db, include_live=req.include_live, operator_status="reference_only")
+        if ref_cands:
+            ref_keys = {c.operator_key for c in ref_cands}
+            stale = REFERENCE_STALE_SECONDS
+            ref_req = ParlayRequest(**{**req.__dict__, "operators": None, "allow_same_event": False})
+            ref_result = optimize(ref_cands, ref_req, ref_keys, {k: False for k in ref_keys}, {}, ref_outcomes,
+                                  stale_seconds=stale)
+            if ref_result.considered["candidates_used"]:
+                cands, outcomes, result, reference = ref_cands, ref_outcomes, ref_result, True
+                result.messages.insert(0, REFERENCE_NOTE)
     event_ids = {c.event_id for c in cands}
     events = {e.id: event_dict(e) for e in db.scalars(select(Event).where(Event.id.in_(event_ids)))} if event_ids else {}
     op_names = {k: o.name for k, o in ops.items()}
@@ -94,11 +113,15 @@ def search_my_odds(db: Session, req: ParlayRequest, user_id: int | None = None, 
         if sol is None:
             alternatives[label] = {"label": LABELS[label], "available": False}
             continue
-        v = validate(sol, events, operator_dict(ops[sol.operator_key]), outcomes=outcomes,
-                     stale_seconds=s.odds_stale_after_seconds, live_stale_seconds=s.live_odds_stale_after_seconds)
+        op_info = operator_dict(ops[sol.operator_key])
+        if reference:
+            op_info = {**op_info, "status": "authorized", "capabilities": {"parlays": True}}
+        v = validate(sol, events, op_info, outcomes=outcomes,
+                     stale_seconds=stale, live_stale_seconds=s.live_odds_stale_after_seconds)
         entry = {
             "label": LABELS[label], "available": True, "explanation": MODE_EXPLANATION[sol.mode],
-            "operator_name": op_names.get(sol.operator_key, sol.operator_key),
+            "operator_name": (REFERENCE_NAME if reference else op_names.get(sol.operator_key, sol.operator_key)),
+            "reference": reference,
             **sol.as_dict(), "validation": v,
             "comparison": operator_comparison(sol, cands, op_names),
         }
@@ -123,7 +146,7 @@ def search_my_odds(db: Session, req: ParlayRequest, user_id: int | None = None, 
     return {
         "request": req.__dict__, "band": result.considered["band"], "alternatives": alternatives,
         "modes_comparison": modes_diff, "messages": result.messages, "considered": result.considered,
-        "model_report": model_report, "generated_at": datetime.now(timezone.utc).isoformat(),
+        "model_report": model_report, "reference": reference, "generated_at": datetime.now(timezone.utc).isoformat(),
         "disclaimer": ("Estimaciones estadísticas, no garantías. Las probabilidades provienen de modelos "
                        "entrenados con datos históricos y pueden estar equivocadas. Juega con responsabilidad."),
     }

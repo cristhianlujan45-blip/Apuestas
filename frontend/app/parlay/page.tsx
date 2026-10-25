@@ -1,8 +1,10 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge, Card, Disclaimer, Empty, ErrorBox, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { api } from "@/lib/api";
 import { addBet } from "@/lib/bets";
+import StakeHint from "@/components/StakeHint";
 import { bogota, cop, odds, pct, signedPct, SPORT_LABEL } from "@/lib/format";
 
 const PRESETS = [2, 3, 5, 10, 15, 20, 30, 50, 100];
@@ -24,14 +26,16 @@ function ParlayCard({ k, a, stake }: { k: string; a: any; stake: number }) {
   );
   const v = a.validation;
   return (
-    <Card title={`Parlay ${k} · ${a.label}`} right={v.valid ? <StatusBadge status="good">Validada</StatusBadge> : <StatusBadge status="warning">Revisar validación</StatusBadge>}>
+    <Card title={`Parlay ${k} · ${a.label}`} right={a.reference ? <StatusBadge status="warning">Cuotas de referencia</StatusBadge> : v.valid ? <StatusBadge status="good">Validada</StatusBadge> : <StatusBadge status="warning">Revisar validación</StatusBadge>}>
+      {a.reference && <p className="mb-3 rounded-lg border border-warning/40 bg-warning/10 p-2 text-xs text-warning">Cuotas promedio de casas internacionales, no de una casa colombiana. Busque estas mismas selecciones en su casa y compare: si allá pagan menos, el valor esperado baja.</p>}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div><div className="text-xs text-ink-muted">Operador</div><div className="font-semibold">{a.operator_name}</div></div>
         <div><div className="text-xs text-ink-muted">Cuota total</div><div className="text-2xl font-semibold num">{odds(a.total_odds)}</div></div>
         <div><div className="text-xs text-ink-muted">Prob. conjunta estimada</div><div className="text-2xl font-semibold num">{pct(a.joint_probability)}</div>
           {a.joint_probability_low != null && <div className="text-[11px] text-ink-muted num">intervalo {pct(a.joint_probability_low)}–{pct(a.joint_probability_high)}</div>}</div>
         <div><div className="text-xs text-ink-muted">Valor esperado</div><div className={`text-2xl font-semibold num ${a.ev > 0 ? "text-good" : "text-ink-2"}`}>{signedPct(a.ev)}</div>
-          <div className="text-[11px] text-ink-muted num">cuota justa {odds(a.fair_total_odds)}</div></div>
+          <div className="text-[11px] text-ink-muted num">cuota justa {odds(a.fair_total_odds)}</div>
+          <StakeHint p={a.joint_probability} odds={a.total_odds} /></div>
       </div>
       <p className="mt-2 text-xs text-ink-muted">{a.explanation}</p>
       <table className="data mt-3">
@@ -110,6 +114,7 @@ export default function ParlayPage() {
   const [selMarkets, setSelMarkets] = useState<string[]>([]);
   const [sameEvent, setSameEvent] = useState(false);
   const [sameDay, setSameDay] = useState(false);
+  const [useRef, setUseRef] = useState(true);
   const [hours, setHours] = useState(72);
   const [stake, setStake] = useState(10000);
   const [res, setRes] = useState<any>(null);
@@ -130,9 +135,13 @@ export default function ParlayPage() {
         target_odds: target, min_odds: minOdds ? +minOdds : null, max_odds: maxOdds ? +maxOdds : null,
         min_legs: minLegs, max_legs: maxLegs, risk, sports: sports.length ? sports : null, operators: ops.length ? ops : null,
         markets: selMarkets.length ? selMarkets : null, allow_same_event: sameEvent, same_day_only: sameDay, max_hours_ahead: hours,
+        use_reference: useRef,
       } }));
     } catch (e) { setErr(e); setRes(null); } finally { setBusy(false); }
   };
+  useEffect(() => {
+    setSelMarkets((sel) => sel.filter((k) => !sports.length || sports.includes(markets[k]?.sport)));
+  }, [sports, markets]);
   const toggle = (arr: string[], set: (x: string[]) => void, v: string) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
   return (
@@ -170,9 +179,10 @@ export default function ParlayPage() {
           <label className="label">Operadores autorizados (vacío = todos)</label>
           <div className="mb-3 flex flex-wrap gap-1">{operators.map((o) => <button key={o.key} className={`tab ${ops.includes(o.key) ? "tab-active" : ""}`} onClick={() => toggle(ops, setOps, o.key)}>{o.name}</button>)}</div>
           <label className="label">Mercados (vacío = todos)</label>
-          <div className="mb-3 flex max-h-28 flex-wrap gap-1 overflow-y-auto">{Object.entries(markets).map(([k, m]: any) => <button key={k} className={`tab text-xs ${selMarkets.includes(k) ? "tab-active" : ""}`} onClick={() => toggle(selMarkets, setSelMarkets, k)}>{m.label}</button>)}</div>
+          <div className="mb-3 flex flex-wrap gap-1">{Object.entries(markets).filter(([, m]: any) => !sports.length || sports.includes(m.sport)).map(([k, m]: any) => <button key={k} className={`tab text-xs ${selMarkets.includes(k) ? "tab-active" : ""}`} onClick={() => toggle(selMarkets, setSelMarkets, k)}>{m.label}</button>)}</div>
           <div className="flex flex-wrap gap-4 text-sm text-ink-2">
             <label className="flex items-center gap-2"><input type="checkbox" checked={sameDay} onChange={(e) => setSameDay(e.target.checked)} /> Solo partidos de hoy</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={useRef} onChange={(e) => setUseRef(e.target.checked)} /> Si no hay cuotas colombianas, usar cuotas de referencia internacionales (para verificar en su casa)</label>
             <label className="flex items-center gap-2"><input type="checkbox" checked={sameEvent} onChange={(e) => setSameEvent(e.target.checked)} /> Permitir mercados del mismo partido (solo casas que lo permiten; probabilidad conjunta simulada)</label>
           </div>
           <button className="btn-primary mt-4" onClick={search} disabled={busy}>{busy ? "Analizando…" : "BUSCAR MI CUOTA"}</button>
@@ -188,11 +198,11 @@ export default function ParlayPage() {
               <Badge>Banda {odds(res.band[0])} – {odds(res.band[1])}</Badge>
               <Badge>{res.considered.candidates_in} selecciones valoradas</Badge>
               <Badge>{res.considered.candidates_used} cumplen filtros</Badge>
-              <Badge>{res.model_report.events_with_quotes} eventos con cuotas CO</Badge>
-              <Badge>Operadores: {res.considered.operators.join(", ") || "ninguno"}</Badge>
+              {res.reference ? <Badge>Cuotas de referencia internacional</Badge> : <Badge>{res.model_report.events_with_quotes} eventos con cuotas CO</Badge>}
+              {!res.reference && <Badge>Operadores: {res.considered.operators.join(", ") || "ninguno"}</Badge>}
             </div>
             {res.messages.map((m: string) => <p key={m} className="mt-2 text-sm text-warning">{m}</p>)}
-            {res.model_report.events_with_quotes === 0 && <p className="mt-2 text-sm text-ink-2">No hay cuotas de operadores colombianos en la base de datos. Configure <code>ODDS_API_NET_KEY</code> o cargue cuotas manualmente/CSV en Configuración.</p>}
+            {res.model_report.events_with_quotes === 0 && <p className="mt-2 text-sm text-ink-2">Todavía no llegan cuotas de casas colombianas. Para recibirlas solas, el administrador debe crear el secreto gratuito <code>ODDSPAPI_KEY</code> (BetPlay y Rushbet). Mientras tanto puede cargar las cuotas de su casa con <Link className="text-accent underline" href="/captura">una foto</Link> o en Configuración → Mis cuotas.</p>}
             {Object.keys(res.considered.discarded || {}).length > 0 && (
               <details className="mt-2 text-xs text-ink-2"><summary className="cursor-pointer">Selecciones descartadas</summary>
                 <ul className="mt-1">{Object.entries(res.considered.discarded).map(([k, v]: any) => <li key={k}>{k}: {v}</li>)}</ul></details>

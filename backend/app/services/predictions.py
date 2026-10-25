@@ -82,6 +82,16 @@ def _reference_1x2(db: Session, ev: Event) -> tuple[float, float, float] | None:
     return None
 
 
+def _reference_ou25(db: Session, ev: Event) -> tuple[float, float] | None:
+    quotes = [q for q in latest_quotes(db, [ev.id], ["pinnacle", "intl_consensus"])
+              if q.market_key == "total_goals" and q.line is not None and abs(q.line - 2.5) < 1e-9]
+    for op in ("pinnacle", "intl_consensus"):
+        sel = {q.selection: q.odds for q in quotes if q.operator_key == op}
+        if {"over", "under"} <= set(sel):
+            return sel["over"], sel["under"]
+    return None
+
+
 def _latest_live_stats(db: Session, ev: Event) -> dict:
     st = db.scalars(select(EventStats).where(EventStats.event_id == ev.id).order_by(EventStats.captured_at.desc())).first()
     return st.stats if st else {}
@@ -95,7 +105,7 @@ def model_event(db: Session, ev: Event, n_draws: int = 120) -> EventModel:
         group, home, away = _football_names(eng, ev)
         league = next((lg for lg, g in LEAGUE_TO_GROUP.items() if g == group), group or "UNK")
         pred: FootballPrediction = eng.predict(league, home, away, aware(ev.start_time), _reference_1x2(db, ev),
-                                               n_draws=n_draws)
+                                               n_draws=n_draws, market_totals=_reference_ou25(db, ev))
         avail = (ev.result_detail or {}).get("availability")
         if avail:
             from ..engine.football.engine import apply_availability
@@ -221,8 +231,11 @@ def verify_chain(db: Session) -> dict:
 # ---------------------------------------------------------------------------
 
 def build_candidates(db: Session, events: list[Event] | None = None, include_live: bool = False,
-                     cache: dict[int, EventModel] | None = None) -> tuple[list[Candidate], dict[int, Outcomes], dict]:
-    authorized = {o.key for o in db.scalars(select(Operator).where(Operator.status == "authorized"))}
+                     cache: dict[int, EventModel] | None = None, operator_status: str = "authorized",
+                     ) -> tuple[list[Candidate], dict[int, Outcomes], dict]:
+    """Candidatos valorados. ``operator_status="reference_only"`` usa las casas de referencia
+    (Pinnacle, consenso internacional) en lugar de las colombianas."""
+    authorized = {o.key for o in db.scalars(select(Operator).where(Operator.status == operator_status))}
     if events is None:
         stmt = select(Event).options(joinedload(Event.home), joinedload(Event.away), joinedload(Event.competition))
         if include_live:

@@ -271,6 +271,39 @@ def operators_compare(a: str, b: str, db: Session = Depends(get_db)) -> dict:
     return compare_operators(db, a, b)
 
 
+@router.get("/stale-lines")
+def stale_lines_route(min_edge: float = 0.02, db: Session = Depends(get_db)) -> dict:
+    from ..services.stale_lines import stale_lines
+
+    return {"lines": stale_lines(db, min_edge=min_edge),
+            "note": "Cuotas de casas colombianas por encima del precio justo de Pinnacle/consenso internacional."}
+
+
+@router.get("/quotes")
+def quotes_co(db: Session = Depends(get_db)) -> dict:
+    """Últimas cuotas de operadores autorizados en eventos por jugar (calculadora de bonos)."""
+    from ..services.odds import freshness, latest_quotes, quote_selection
+
+    authorized = sorted(o.key for o in db.scalars(select(Operator).where(Operator.status == "authorized")))
+    now = datetime.now(timezone.utc)
+    events: dict[int, Event | None] = {}
+    rows = []
+    for q in latest_quotes(db, None, authorized):
+        if not q.is_available:
+            continue
+        if q.event_id not in events:
+            events[q.event_id] = db.get(Event, q.event_id)
+        ev = events[q.event_id]
+        if ev is None or ev.status != "scheduled" or aware(ev.start_time) <= now:
+            continue
+        sel = quote_selection(q)
+        rows.append({"event_id": q.event_id, "event": ev.label, "start_time": aware(ev.start_time).isoformat(),
+                     "operator": q.operator_key, "market": q.market_key, "selection": q.selection,
+                     "selection_key": sel.key, "selection_label": sel.describe(ev.home.name, ev.away.name),
+                     "line": q.line, "player": q.player, "odds": q.odds, "source": q.source, **freshness(q)})
+    return {"quotes": rows}
+
+
 @router.get("/surebets")
 def surebets(stake: float = 100000.0, db: Session = Depends(get_db)) -> dict:
     from ..services.arbitrage import surebets_from_db
@@ -333,6 +366,7 @@ class ParlayIn(BaseModel):
     same_day_only: bool = False
     max_hours_ahead: float | None = 72
     include_live: bool = False
+    use_reference: bool = True
 
 
 @router.post("/parlay/search")

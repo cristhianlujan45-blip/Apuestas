@@ -7,7 +7,8 @@ import { bogota } from "@/lib/format";
 import { parse, recognize, type Proposal } from "@/lib/ocr";
 import { useApi } from "@/lib/useApi";
 
-const SEL: Record<string, string[]> = { "1x2": ["home", "draw", "away"], total_goals: ["over", "under"], btts: ["yes", "no"], double_chance: ["1X", "X2", "12"], dnb: ["home", "away"] };
+const SEL: Record<string, string[]> = { "1x2": ["home", "draw", "away"], total_goals: ["over", "under"], btts: ["yes", "no"], double_chance: ["1X", "X2", "12"], dnb: ["home", "away"],
+  corners_total: ["over", "under"], cards_total: ["over", "under"] };
 const ES: Record<string, string> = { home: "Local", away: "Visitante", draw: "Empate", over: "Más de", under: "Menos de", yes: "Sí", no: "No" };
 
 export default function Capture() {

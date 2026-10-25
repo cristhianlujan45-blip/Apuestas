@@ -142,6 +142,51 @@ def test_full_flow(client):
     assert r.status_code == 423
 
 
+def test_stale_lines_and_reference_parlay(client):
+    from app.db import session_scope
+    from app.models import Event
+    from app.providers.base import ProviderQuote
+    from app.services.events import add_quotes
+
+    now = datetime.now(timezone.utc)
+    with session_scope() as db:
+        ev = next(e for e in db.query(Event).all() if e.home.name == "Arsenal" and e.status == "scheduled")
+        eid = ev.id
+        # Pinnacle antes y después de un movimiento hacia el local; las casas colombianas no cambiaron
+        for ts, (h, d, a) in ((now - timedelta(hours=5), (1.80, 3.80, 4.60)), (now, (1.55, 4.30, 6.50))):
+            add_quotes(db, ev, [ProviderQuote("t", "x", "pinnacle", "1x2", s, o) for s, o in (("home", h), ("draw", d), ("away", a))],
+                       {}, "oddspapi", ts)
+        db.commit()
+    lines = client.get("/api/stale-lines?min_edge=0.02").json()["lines"]
+    row = next(r for r in lines if r["event_id"] == eid and r["operator"] == "wplay" and r["selection_key"].startswith("1x2|home"))
+    assert row["status"] == "retrasada" and row["ref_operator"] == "pinnacle"
+    assert row["edge"] == pytest.approx(row["odds"] * row["p_fair"] - 1)
+    assert all(r["operator"] not in ("pinnacle", "intl_consensus") for r in lines)
+
+    # Sin cuotas colombianas para el filtro → combinada con cuotas de referencia, señalada como tal
+    res = client.post("/api/parlay/search", json={"target_odds": 1.6, "min_odds": 1.4, "max_odds": 1.8, "min_legs": 1,
+                                                  "max_legs": 1, "risk": "high", "operators": ["codere"]}).json()
+    assert res["reference"] is True
+    alt = next(a for a in res["alternatives"].values() if a["available"])
+    assert alt["reference"] and alt["operator"] == "pinnacle" and "Referencia" in alt["operator_name"]
+    assert "REFERENCIA" in res["messages"][0]
+    res = client.post("/api/parlay/search", json={"target_odds": 1.6, "min_legs": 1, "max_legs": 1, "risk": "high",
+                                                  "operators": ["codere"], "use_reference": False}).json()
+    assert res["reference"] is False and not any(a["available"] for a in res["alternatives"].values())
+
+    q = client.get("/api/quotes").json()["quotes"]
+    assert q and all(x["operator"] not in ("pinnacle", "intl_consensus") for x in q)
+
+
+def test_stale_limit_by_source():
+    from app.services.odds import stale_limit
+
+    assert stale_limit("odds_api_net", False) == 900
+    assert stale_limit("oddspapi", False) >= 8 * 3600
+    assert stale_limit("manual", False) == 2 * 3600
+    assert stale_limit("oddspapi", True) <= 60
+
+
 def test_prediction_chain(client):
     from app.api.routes import record_upcoming
     from app.db import session_scope

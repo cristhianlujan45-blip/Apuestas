@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, Empty, PageHeader, Stat, StatusBadge } from "@/components/ui";
 import { addBet, deleteBet, evaluate, loadBets, setManualResult, summary, type Bet, type Result } from "@/lib/bets";
 import { bogota, cop, odds, pct, signedPct } from "@/lib/format";
+import { currentBankroll, loadBankroll, storeBankrollNow } from "@/lib/bankroll";
 
 const ST: Record<string, any> = { ganada: "good", perdida: "critical", pendiente: "info", nula: "info", parcial: "warning", "liquidar a mano": "warning" };
 
@@ -20,11 +21,14 @@ export default function MyBets() {
   }, []);
   const evals = useMemo(() => bets.map((b) => evaluate(b, results)), [bets, results]);
   const s = summary(evals);
+  const bk = loadBankroll();
+  useEffect(() => { storeBankrollNow(s.profit); }, [s.profit]);
   return (
     <div className="space-y-4">
       <PageHeader title="Mis apuestas"
         subtitle="Registre lo que apostó en su casa. La app las liquida con los resultados reales y mide el CLV: si consiguió mejor cuota que la de cierre justa (Pinnacle sin margen). Un CLV positivo sostenido es la mejor señal de ventaja real, antes incluso que el saldo." />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <Stat label="Banca actual" value={bk.initial_cop ? cop(currentBankroll(bk, s.profit)) : "—"} hint={bk.initial_cop ? `inicial ${cop(bk.initial_cop)}` : <Link className="text-accent" href="/configuracion">configurar banca</Link>} />
         <Stat label="Apuestas" value={s.total} hint={`${s.settled} liquidadas`} />
         <Stat label="Invertido" value={cop(s.staked)} />
         <Stat label="Ganancia" value={<span className={s.profit >= 0 ? "text-good" : "text-critical"}>{cop(s.profit)}</span>} />

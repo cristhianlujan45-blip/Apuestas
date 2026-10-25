@@ -60,6 +60,7 @@ COUNT_STATS = {
     "sot": ("hst", "ast"),
 }
 
+TOTALS_MARKET_WEIGHT = 0.9
 DEFAULT_WEIGHTS = {"dixon_coles": 0.25, "elo": 0.1, "lightgbm": 0.15, "logreg": 0.15, "market": 0.35}
 
 
@@ -136,7 +137,9 @@ def _nb_sample(rng: np.random.Generator, mean: float, dispersion: float, n: int)
 class FootballEngine:
     def __init__(self, ml_models: list[str] | None = None, fit_bivariate: bool = True,
                  laplace: bool = True, weights: dict[str, float] | None = None,
-                 weights_no_market: dict[str, float] | None = None):
+                 weights_no_market: dict[str, float] | None = None, totals_market_weight: float | None = None):
+        # Peso del mercado de más/menos 2.5 en la matriz de marcadores (elegido en la validación)
+        self.totals_market_weight = TOTALS_MARKET_WEIGHT if totals_market_weight is None else totals_market_weight
         self.ml_models = ml_models if ml_models is not None else ["logreg", "lightgbm"]
         self.fit_bivariate = fit_bivariate
         self.laplace = laplace
@@ -183,7 +186,8 @@ class FootballEngine:
                 ds = d.dropna(subset=[ch, ca])
                 if len(ds) < 60:
                     continue
-                m = TeamRatingModel(name=f"{stat}_model", use_rho=False, prior_sd=0.3, compute_cov=False)
+                # prior_sd=0.1: mejor desviación fuera de muestra (feb–jun 2026) que 0.05, 0.2 y 0.3
+                m = TeamRatingModel(name=f"{stat}_model", use_rho=False, prior_sd=0.1, compute_cov=False)
                 self.counts[g][stat] = m.fit(ds, ref_date, y_home=ch, y_away=ca)
 
         # Ratings secuenciales + variables de ML sobre todo el histórico
@@ -206,7 +210,7 @@ class FootballEngine:
     # ------------------------------------------------------------ predicción
     def predict(self, league: str, home: str, away: str, kickoff: datetime | None = None,
                 market_odds: tuple[float, float, float] | None = None, n_draws: int = 200,
-                seed: int = 0) -> FootballPrediction:
+                seed: int = 0, market_totals: tuple[float, float] | None = None) -> FootballPrediction:
         g = group_of(league)
         components: dict[str, list[float]] = {}
         quality = {"group": g, "issues": []}
@@ -269,6 +273,14 @@ class FootballEngine:
             matrix = matrix_from_rates(1.45, 1.15)
             quality["issues"].append("Matriz de marcadores genérica (baja confianza en mercados de goles)")
         calibrated = calibrate_matrix(matrix, probs)
+        w_tot = getattr(self, "totals_market_weight", TOTALS_MARKET_WEIGHT)
+        if market_totals is not None and all(o and o > 1 for o in market_totals) and w_tot > 0:
+            p_mkt = float(devig(list(market_totals), "power")[0])
+            p_model = over_prob(calibrated, 2.5)
+            target = w_tot * p_mkt + (1 - w_tot) * p_model
+            calibrated = calibrate_matrix_totals(calibrated, probs, target)
+            quality["totals_market"] = {"model_over_2_5": p_model, "market_over_2_5": p_mkt, "weight": w_tot,
+                                        "blended_over_2_5": target}
         if draws:
             ratio = calibrated / np.clip(matrix, 1e-15, None)
             cal_draws = []
@@ -300,6 +312,33 @@ class FootballEngine:
             probs=probs, matrix=calibrated, exp_goals=exp_goals, count_params=count_params,
             uncertainty=unc, data_quality=quality, model_version=self.version, draws_matrices=draws,
         )
+
+
+def over_prob(matrix: np.ndarray, line: float) -> float:
+    n, m = matrix.shape
+    tot = np.add.outer(np.arange(n), np.arange(m))
+    return float(matrix[tot > line].sum() / matrix.sum())
+
+
+def calibrate_matrix_totals(matrix: np.ndarray, probs: np.ndarray, target_over: float, line: float = 2.5,
+                            rounds: int = 4) -> np.ndarray:
+    """Inclina la matriz con exp(t·(goles totales)) hasta que P(más de ``line``) = ``target_over``,
+    alternando con la calibración 1X2 para mantener ambas restricciones."""
+    n, m = matrix.shape
+    tot = np.add.outer(np.arange(n), np.arange(m)).astype(float)
+    cur = matrix
+    for _ in range(rounds):
+        lo, hi = -3.0, 3.0
+        for _ in range(60):
+            t = (lo + hi) / 2
+            tilted = cur * np.exp(t * tot)
+            if over_prob(tilted, line) < target_over:
+                lo = t
+            else:
+                hi = t
+        cur = cur * np.exp(((lo + hi) / 2) * tot)
+        cur = calibrate_matrix(cur / cur.sum(), probs)
+    return cur
 
 
 def matrix_total_goals_quantiles(matrix: np.ndarray) -> dict:

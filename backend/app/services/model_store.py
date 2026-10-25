@@ -73,19 +73,21 @@ def train_football(db: Session, validate: bool = True, test_days: int = 365,
     if hist.empty:
         raise RuntimeError("No se pudo descargar histórico de fútbol")
     now = datetime.now(timezone.utc)
-    weights = weights_nm = None
+    weights = weights_nm = totals_w = None
     val = None
     if validate:
         test_from = (now - timedelta(days=test_days)).strftime("%Y-%m-%d")
         val = walk_forward_football(hist, test_from, ml_models=ml_models)
         weights = val.weights or None
         weights_nm = val.ensemble.get("weights_no_market")
+        totals_w = (val.totals.get("market_blend") or {}).get("market_weight")
     active_ml = [m for m in ml_models if not weights or weights.get(m, 0) > 1e-3
                  or (weights_nm or {}).get(m, 0) > 1e-3] or ["logreg"]
-    engine = FootballEngine(ml_models=active_ml, weights=weights, weights_no_market=weights_nm).fit(hist, now)
+    engine = FootballEngine(ml_models=active_ml, weights=weights, weights_no_market=weights_nm,
+                            totals_market_weight=totals_w).fit(hist, now)
     meta = {"rows": len(hist), "leagues": sorted(hist["league"].unique().tolist()),
             "from": str(hist["date"].min()), "to": str(hist["date"].max()), "weights": weights,
-            "weights_no_market": weights_nm, "ml": active_ml}
+            "weights_no_market": weights_nm, "totals_market_weight": totals_w, "ml": active_ml}
     version = f"{now:%Y%m%d%H%M}-{_version_hash(meta)}"
     engine.version = f"football-{version}"
     MODEL_DIR.mkdir(parents=True, exist_ok=True)

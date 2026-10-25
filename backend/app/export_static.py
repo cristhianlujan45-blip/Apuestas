@@ -25,6 +25,7 @@ from .services import predictions as P
 from .services.arbitrage import surebets_from_db
 from .services.events import event_dict
 from .services.odds import freshness, latest_quotes, odds_history, quote_selection
+from .services.stale_lines import reference_fair, round_ref, stale_lines
 
 SCHEMA_VERSION = 1
 
@@ -73,6 +74,7 @@ def export(db: Session, out: Path) -> dict:
                                                  joinedload(Event.competition))).unique()}
     cache: dict[int, P.EventModel] = {}
     matrices: dict[int, np.ndarray] = {}
+    counts: dict[int, dict] = {}
     for eid, ev in evs.items():
         detail = R.get_event(eid, db)
         em = P.model_event(db, ev)
@@ -85,6 +87,8 @@ def export(db: Session, out: Path) -> dict:
         if em.matrix is not None:
             detail["matrix"] = np.round(em.matrix, 7)
             matrices[eid] = np.round(em.matrix, 7)
+        if (detail.get("model") or {}).get("counts"):
+            counts[eid] = detail["model"]["counts"]
         hist = {}
         for row in detail.get("markets", []):
             if row.get("offers"):
@@ -110,6 +114,7 @@ def export(db: Session, out: Path) -> dict:
 
     _write(out / "events.json", {"generated_at": now, "events": events})
     _write(out / "matrices.json", matrices)
+    _write(out / "counts.json", counts)
     _write(out / "candidates.json", {"generated_at": now, "candidates": [c.as_dict() for c in cands],
                                      "report": report})
     _write(out / "quotes.json", {"generated_at": now, "quotes": quotes})
@@ -158,6 +163,9 @@ def export(db: Session, out: Path) -> dict:
     # Feed de alertas (la app notifica las nuevas) y resultados con cuota de cierre (CLV)
     from .services.alerts import current_alerts
 
+    ref = reference_fair(db, list(evs))
+    _write(out / "reference_fair.json", round_ref(ref))
+    _write(out / "stale_lines.json", {"generated_at": now, "lines": stale_lines(db, ref=ref)})
     _write(out / "alerts_feed.json", {"generated_at": now, "alerts": current_alerts(db)})
     _write(out / "results.json", {"generated_at": now, "results": _results_with_closing(db)})
 

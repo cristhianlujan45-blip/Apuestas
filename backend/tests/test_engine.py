@@ -196,3 +196,16 @@ def test_availability_adjustment():
     adj = apply_availability(base, 0.8, 1.0, {"missing_home": ["X"]})
     assert adj.probs[0] < p0[0] and adj.exp_goals[0] == pytest.approx(l0 * 0.8)
     assert adj.matrix.sum() == pytest.approx(1)
+
+
+def test_totals_calibration_keeps_1x2():
+    from app.engine.football.engine import calibrate_matrix_totals, over_prob
+    from app.engine.football.goals import matrix_from_rates, outcome_probs
+
+    m = matrix_from_rates(1.05, 0.65)
+    p = outcome_probs(m)
+    for target in (0.30, 0.45, 0.60):
+        c = calibrate_matrix_totals(m, p, target)
+        assert abs(over_prob(c, 2.5) - target) < 2e-3
+        assert np.allclose(outcome_probs(c), p, atol=1e-6)
+        assert abs(c.sum() - 1) < 1e-9

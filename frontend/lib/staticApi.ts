@@ -3,13 +3,17 @@
  * publica el pipeline de datos y calculando en el dispositivo (lib/engine.ts).
  */
 import {
-  band, calculator, comparison, describe, evOf, fairOdds, MARKET_LABEL, oddsFormats, optimize, parseKey, pEff, priceMatrix,
+  band, calculator, comparison, describe, evOf, fairOdds, MARKET_LABEL, oddsFormats, optimize, parseKey, pEff, priceAny, priceMatrix, staleLimit, staleLines,
   selKey, surebets, validate, type Cand, type OpInfo, type Req, type Sol,
 } from "./engine";
 
 export const DEFAULT_DATA_URL =
   process.env.NEXT_PUBLIC_DATA_URL || "https://raw.githubusercontent.com/cristhianlujan45-blip/Apuestas/datos/data";
 const STALE_SEC = 900;
+// Las cuotas de referencia (promedio internacional) se publican con cada ejecución del pipeline
+const REF_STALE_SEC = 12 * 3600;
+export const REFERENCE_NAME = "Referencia internacional (no es casa colombiana)";
+const REFERENCE_NOTE = "No hay cuotas de casas colombianas para estos filtros. Se usaron cuotas de REFERENCIA (promedio de casas internacionales): su casa puede pagar distinto. Verifique cada cuota antes de apostar o cárguela en «Cuotas desde foto» para revaluar la combinada.";
 
 // ------------------------------------------------------------------ almacenamiento local
 function load<T>(key: string, fallback: T): T {
@@ -68,8 +72,9 @@ export type Manual = {
 const manualAll = () => load<Manual[]>("manual_quotes", []);
 
 async function ctx() {
-  const [events, cands, quotes, ops, matrices] = await Promise.all([
+  const [events, cands, quotes, ops, matrices, counts] = await Promise.all([
     file("events.json"), file("candidates.json"), file("quotes.json"), file("operators.json"), file("matrices.json").catch(() => ({})),
+    file("counts.json").catch(() => ({})),
   ]);
   const evById: Record<string, any> = {};
   events.events.forEach((e: any) => { evById[e.id] = e; });
@@ -86,9 +91,8 @@ async function ctx() {
     const age = (Date.now() - new Date(m.captured_at).getTime()) / 1000;
     manualQuotes.push({ event_id: m.event_id, event: ev.label, operator: m.operator, market: m.market, selection: m.selection, selection_key: key,
       selection_label: label, line: m.line, player: null, odds: m.odds, source: "manual", captured_at: m.captured_at, provider_ts: m.captured_at,
-      age_seconds: age, stale: age > STALE_SEC, live: false });
-    const mat = matrices[String(m.event_id)];
-    const pr = mat ? priceMatrix(mat, sel) : null;
+      age_seconds: age, stale: age > staleLimit("manual", STALE_SEC), live: false });
+    const pr = priceAny(matrices[String(m.event_id)], counts[String(m.event_id)], sel);
     if (!pr) continue;
     manualCands.push({ event_id: m.event_id, event: ev.label, sport: ev.sport, competition: ev.competition, start_time: ev.start_time,
       selection_key: key, selection: label, operator: m.operator, odds: m.odds, captured_at: m.captured_at, probability: pEff(pr),
@@ -100,7 +104,22 @@ async function ctx() {
   const allCands: Cand[] = cands.candidates.filter((c: Cand) => !mk.has(`${c.event_id}|${c.selection_key}|${c.operator}`)).concat(manualCands);
   const mq = new Set(manualQuotes.map((q) => `${q.event_id}|${q.selection_key}|${q.operator}`));
   const allQuotes = quotes.quotes.filter((q: any) => !mq.has(`${q.event_id}|${q.selection_key}|${q.operator}`)).concat(manualQuotes);
-  return { events, evById, cands: allCands, quotes: allQuotes, ops: opList, names, matrices, manual };
+  const refOps = new Set(opList.filter((o) => o.status === "reference_only").map((o) => o.key));
+  const refCands: Cand[] = [];
+  for (const q of quotes.quotes) {
+    if (!refOps.has(q.operator)) continue;
+    const ev = evById[q.event_id];
+    if (!ev) continue;
+    const pr = priceAny(matrices[String(q.event_id)], counts[String(q.event_id)], parseKey(q.selection_key));
+    if (!pr) continue;
+    refCands.push({ event_id: q.event_id, event: ev.label, sport: ev.sport, competition: ev.competition, start_time: ev.start_time,
+      selection_key: q.selection_key, selection: q.selection_label, operator: q.operator, odds: q.odds, captured_at: q.captured_at,
+      probability: pEff(pr), probability_low: null, probability_high: null, fair_odds: fairOdds(pr), ev: evOf(pr, q.odds), pricing: pr,
+      data_sufficient: !!ev.data_sufficient, is_live: false, source: "referencia" });
+  }
+  const authorized = new Set(opList.filter((o) => o.status === "authorized").map((o) => o.key));
+  const coQuotes = allQuotes.filter((q: any) => authorized.has(q.operator));
+  return { events, evById, counts, cands: allCands, refCands, quotes: allQuotes, coQuotes, ops: opList, names, matrices, manual };
 }
 
 // ------------------------------------------------------------------ límites locales
@@ -165,7 +184,16 @@ async function search(req: Req) {
   const g = gate();
   if (g) throw new HttpError(423, g);
   const c = await ctx();
-  const res = optimize(c.cands, req, c.ops, c.matrices, STALE_SEC);
+  let res = optimize(c.cands, req, c.ops, c.matrices, STALE_SEC);
+  let reference = false, cands = c.cands, ops = c.ops, stale = STALE_SEC;
+  if (req.use_reference !== false && res.considered.candidates_used === 0 && c.refCands.length) {
+    const refOps = c.ops.filter((o) => o.status === "reference_only").map((o) => ({ ...o, status: "authorized", capabilities: { parlays: true } }));
+    const r2 = optimize(c.refCands, { ...req, operators: null, allow_same_event: false }, refOps, c.matrices, REF_STALE_SEC);
+    if (r2.considered.candidates_used) {
+      res = r2; reference = true; cands = c.refCands; ops = refOps; stale = REF_STALE_SEC;
+      res.messages.unshift(REFERENCE_NOTE);
+    }
+  }
   const LABELS: Record<string, string> = { A: "Mayor probabilidad estimada", B: "Equilibrio probabilidad / valor", C: "Mejor valor esperado", D: "Menor número de selecciones" };
   const EXPL: Record<string, string> = {
     conservative: "Maximiza la probabilidad conjunta usando la cota inferior de la incertidumbre del modelo.",
@@ -177,9 +205,10 @@ async function search(req: Req) {
   const history = load<any[]>("parlays", []);
   for (const [k, sol] of Object.entries(res.alternatives) as [string, Sol | null][]) {
     if (!sol) { alternatives[k] = { label: LABELS[k], available: false }; continue; }
-    const v = validate(sol, c.evById, c.ops.find((o) => o.key === sol.operator), c.matrices, STALE_SEC);
-    const entry = { label: LABELS[k], available: true, explanation: EXPL[sol.mode], operator_name: c.names[sol.operator] || sol.operator, ...sol,
-      legs: sol.legs, validation: v, comparison: comparison(sol, c.cands, c.names), parlay_id: `${Date.now()}-${k}` };
+    const v = validate(sol, c.evById, ops.find((o) => o.key === sol.operator), c.matrices, stale);
+    const entry = { label: LABELS[k], available: true, explanation: EXPL[sol.mode], reference,
+      operator_name: reference ? REFERENCE_NAME : c.names[sol.operator] || sol.operator, ...sol,
+      legs: sol.legs, validation: v, comparison: comparison(sol, cands, c.names), parlay_id: `${Date.now()}-${k}` };
     alternatives[k] = entry;
     history.unshift({ id: entry.parlay_id, created_at: new Date().toISOString(), label: k, mode: sol.mode, operator: sol.operator,
       total_odds: sol.total_odds, joint_probability: sol.joint_probability, ev: sol.ev, status: "open",
@@ -188,7 +217,7 @@ async function search(req: Req) {
   save("parlays", history.slice(0, 300));
   const evQuotes = new Set(c.cands.map((x) => x.event_id));
   return {
-    request: req, band: res.considered.band, alternatives, messages: res.messages, considered: res.considered,
+    request: req, band: res.considered.band, alternatives, reference, messages: res.messages, considered: res.considered,
     modes_comparison: Object.entries(alternatives).filter(([, a]) => a.available).map(([k, a]) => ({ parlay: k, mode: a.mode, operator: a.operator, n_legs: a.n_legs, total_odds: a.total_odds, joint_probability: a.joint_probability, ev: a.ev })),
     model_report: { events_with_quotes: evQuotes.size, events_modeled: evQuotes.size },
     generated_at: new Date().toISOString(),
@@ -207,7 +236,7 @@ async function eventDetail(id: string) {
     const key = selKey(sel);
     let row = rows.find((r: any) => r.selection_key === key);
     if (!row) {
-      const pr = d.matrix ? priceMatrix(d.matrix, sel) : null;
+      const pr = priceAny(d.matrix, d.model?.counts, sel);
       row = { selection_key: key, market: m.market, market_label: MARKET_LABEL[m.market] || m.market, selection: m.selection, line: m.line,
         label: describe(sel, ev?.home, ev?.away), offers: [], reference: [], missing_operators: [],
         model: pr ? { ...pr, p: pEff(pr), fair_odds: fairOdds(pr), interval: {} } : undefined };
@@ -216,7 +245,7 @@ async function eventDetail(id: string) {
     row.offers = row.offers.filter((o: any) => o.operator !== m.operator);
     const age = (Date.now() - new Date(m.captured_at).getTime()) / 1000;
     row.offers.push({ operator: m.operator, operator_name: c.names[m.operator] || m.operator, odds: m.odds, source: "manual",
-      captured_at: m.captured_at, provider_ts: m.captured_at, age_seconds: age, stale: age > STALE_SEC, live: false });
+      captured_at: m.captured_at, provider_ts: m.captured_at, age_seconds: age, stale: age > staleLimit("manual", STALE_SEC), live: false });
     row.offers.sort((a: any, b: any) => b.odds - a.odds);
     const best = row.offers[0];
     row.best = { ...best };
@@ -274,7 +303,7 @@ async function assistant(messages: { role: string; content: string }[]) {
   }
   if (text.includes("surebet") || text.includes("arbitraje") || text.includes("ventaja")) {
     const c = await ctx();
-    const sb = surebets(c.quotes);
+    const sb = surebets(c.coQuotes);
     const answer = sb.length ? sb.slice(0, 5).map((s) => `**${s.event}** (${s.market}): beneficio garantizado ${s.profit_pct.toFixed(2)} % — ${s.legs.map((l: any) => `${l.selection_label} @ ${l.odds} en ${l.operator}`).join(" · ")}`).join("\n")
       : "No hay surebets entre las cuotas colombianas disponibles ahora mismo.";
     return { answer, tools_used: ["surebets"], engine: "local" };
@@ -348,9 +377,19 @@ export async function route(path: string, init: { method?: string; json?: any } 
   }
   if (p === "/results") return file("results.json").catch(() => ({ results: [] }));
   if (p === "/alerts-feed") return file("alerts_feed.json").catch(() => ({ alerts: [] }));
+  if (p === "/quotes") {
+    const c = await ctx();
+    return { quotes: c.coQuotes.filter((x: any) => c.evById[x.event_id] && new Date(c.evById[x.event_id].start_time).getTime() > Date.now())
+      .map((x: any) => ({ ...x, start_time: c.evById[x.event_id].start_time })) };
+  }
+  if (p === "/stale-lines") {
+    const [c, ref] = await Promise.all([ctx(), file("reference_fair.json").catch(() => ({}))]);
+    return { lines: staleLines(c.coQuotes, ref, c.evById, c.names, +(q.get("min_edge") || 0.02), STALE_SEC),
+      note: "Cuotas de casas colombianas por encima del precio justo de Pinnacle/consenso internacional." };
+  }
   if (p === "/surebets") {
     const c = await ctx();
-    return { surebets: surebets(c.quotes, +(q.get("stake") || 100000)), quotes: c.quotes.length };
+    return { surebets: surebets(c.coQuotes, +(q.get("stake") || 100000)), quotes: c.coQuotes.length };
   }
   if (p === "/odds/operators-compare") {
     const c = await ctx();

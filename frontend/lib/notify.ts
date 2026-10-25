@@ -46,6 +46,13 @@ export async function collectAlerts(minEv: number): Promise<AlertItem[]> {
     }
   } catch { /* sin datos */ }
   try {
+    const sl = await api(`/stale-lines?min_edge=${minEv}`);
+    for (const x of (sl.lines || []).slice(0, 10)) {
+      out.push({ id: `sl|${x.event_id}|${x.selection_key}|${x.operator}|${x.odds}`, kind: "stale_line", event_id: x.event_id,
+        title: `Cuota ${x.status === "retrasada" ? "retrasada" : "sobre el mercado"} ${(x.edge * 100).toFixed(1)} % · ${x.event}`, body: `${x.selection} @ ${x.odds} en ${x.operator_name}: ${x.explanation}` });
+    }
+  } catch { /* sin datos */ }
+  try {
     const v = await api(`/value?min_edge=${minEv}`);
     for (const x of (v.value_bets || []).slice(0, 10)) {
       out.push({ id: `ev|${x.event_id}|${x.selection_key}|${x.operator}|${x.odds}`, kind: "value", event_id: x.event_id,

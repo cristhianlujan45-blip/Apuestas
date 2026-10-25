@@ -259,6 +259,26 @@ def walk_forward_football(history: pd.DataFrame, test_from: str, test_to: str | 
         "log_loss_over_2_5": M.log_loss(p_over25[tot_ok], over_actual[tot_ok].astype(int)),
         "calibration_over_2_5": M.calibration_table(p_over25[tot_ok], over_actual[tot_ok]),
     }
+    # Mezcla con el mercado de más/menos 2.5 (consenso sin margen): el peso se elige por log loss
+    # sobre los partidos del periodo de validación que tienen ambas cuotas.
+    if {"o25", "u25"} <= set(hist.columns):
+        o = hist["o25"].to_numpy(float)
+        u = hist["u25"].to_numpy(float)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            p_mkt = (1 / o) / (1 / o + 1 / u)
+        m_ok = tot_ok & np.isfinite(p_mkt) & (o > 1) & (u > 1)
+        if m_ok.sum() >= 200:
+            grid = {}
+            for w in np.round(np.linspace(0, 1, 11), 2):
+                pb = w * p_mkt[m_ok] + (1 - w) * p_over25[m_ok]
+                grid[float(w)] = M.log_loss(pb, over_actual[m_ok].astype(int))
+            best_w = min(grid, key=grid.get)
+            totals["market_blend"] = {
+                "n": int(m_ok.sum()), "log_loss_by_market_weight": grid, "market_weight": best_w,
+                "brier_model": M.brier(p_over25[m_ok], over_actual[m_ok]),
+                "brier_market": M.brier(p_mkt[m_ok], over_actual[m_ok]),
+                "brier_blend": M.brier(best_w * p_mkt[m_ok] + (1 - best_w) * p_over25[m_ok], over_actual[m_ok]),
+            }
 
     # --- Rentabilidad simulada (cuotas de referencia internacionales) -------
     roi: dict = {}

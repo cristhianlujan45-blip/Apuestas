@@ -22,11 +22,16 @@ cuotas y **PARLAY AI**, un optimizador de combinadas con la función **BUSCAR MI
 | Calculadora COP | Retorno, ganancia, cuota necesaria (buscador inverso), inversión necesaria y control de capital. |
 | Historial y aprendizaje | Predicciones inmutables encadenadas por hash (y bloqueadas por trigger en PostgreSQL), con Brier, log loss, RPS, calibración, MAE/RMSE, ROI, detección de degradación, versionado y reentrenamiento controlado. |
 | Asistente IA | Con `ANTHROPIC_API_KEY` usa Claude con herramientas de la plataforma; sin clave, un enrutador local en español. Los números siempre salen de los modelos. |
+| Cuotas retrasadas | Compara cada cuota colombiana con el precio justo de Pinnacle o del consenso internacional. La marca *retrasada* cuando la referencia se movió después del último cambio de la casa. |
+| Bonos y apuestas gratis | Convierte apuestas gratis y de calificación en saldo cubriendo el resultado contrario en otra casa; busca la mejor cobertura con las cuotas disponibles. |
+| Córners y tarjetas | Modelo de fuerza por equipo (binomial negativa) con cuota justa por línea en la ficha del partido; las cuotas de córners y tarjetas se valoran como las de goles. |
+| Banca | Importe sugerido por oportunidad: Kelly fraccional con tope por apuesta, a partir de su banca y de sus apuestas liquidadas. |
 | Mis apuestas · CLV | Registro de lo apostado (desde PARLAY AI, Valor o a mano). Se liquida con los resultados reales y mide el CLV contra el cierre de Pinnacle sin margen. |
 | Cuotas desde foto | OCR en el propio teléfono (tesseract.js): detecta partido, 1X2, totales y ambos marcan en una captura de su casa. Usted revisa antes de guardar. |
 | Alertas | Surebets y apuestas de valor: notificación local en la app y push al teléfono con [ntfy](https://ntfy.sh) desde el pipeline. |
 | Bajas | Con `API_FOOTBALL_KEY`, las lesiones y sanciones recortan el ataque esperado según el peso del jugador en los goles del equipo. |
-| Copia de seguridad | Exporta e importa en un archivo sus apuestas, cuotas, combinadas, límites y ajustes. |
+| Copia y sincronización | Exporta e importa un archivo, o sincroniza solo entre celular y web con un Gist secreto de su cuenta de GitHub. |
+| Actualizaciones | La app Android avisa cuando hay una APK nueva. |
 | Juego responsable | Verificación de mayoría de edad, límites de gasto y de sesión (los aumentos se aplican tras 24 h), autoexclusión y recursos de ayuda. |
 
 ## App Android (APK)
@@ -53,6 +58,8 @@ cuotas y **PARLAY AI**, un optimizador de combinadas con la función **BUSCAR MI
   - Sin ellos, compila un APK de depuración.
   - Para pasar de la versión de depuración a la firmada hay que desinstalar la app una vez.
   - Guarde el `.jks` fuera del repositorio: sin él no podrá publicar actualizaciones en Play.
+  - Pasos y textos de la ficha: [`docs/GOOGLE_PLAY.md`](docs/GOOGLE_PLAY.md). Política de privacidad:
+    <https://cristhianlujan45-blip.github.io/Apuestas/privacidad/>.
 - **Directo real con servidor:** ver [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md) (Render o VPS). Después, en
   Configuración → Servidor en vivo, pegue la URL del servidor.
 - **Compilación local:**
@@ -70,7 +77,24 @@ cuotas y **PARLAY AI**, un optimizador de combinadas con la función **BUSCAR MI
    - La validación con miles de partidos reales muestra que el precio de mercado sin margen y el ensemble predicen
      casi igual, y mejor que cualquier modelo aislado.
    - La ventaja está en encontrar cuotas colombianas **por encima** de esa probabilidad justa.
-3. **Mejor precio:** para cada selección se muestra la casa que más paga; en combinadas la diferencia se multiplica.
+3. **Cuotas retrasadas:**
+   - Pinnacle viaja gratis en la misma consulta de OddsPapi que BetPlay y Rushbet.
+   - Cuando una casa colombiana paga más que el precio justo de Pinnacle, la sección *Cuotas
+     retrasadas* lo avisa, también por notificación.
+   - No depende de ningún modelo propio.
+4. **Bonos:** las apuestas gratis de las casas se convierten en saldo cubriendo el resultado contrario
+   en otra casa (sección *Bonos y apuestas gratis*).
+5. **Mejor precio:** para cada selección se muestra la casa que más paga; en combinadas la diferencia
+   se multiplica.
+
+Lo que dicen las validaciones con datos reales:
+- En 1X2 y en más/menos 2.5, el precio de mercado sin margen predice tan bien o mejor que los
+  modelos.
+  - Por eso la matriz de goles se ajusta a la cuota de más/menos del mercado. El peso lo elige la
+    validación; hoy es casi todo mercado.
+  - Las señales de valor salen de diferencias de precio entre casas, no de que el modelo «sepa más».
+- En córners y tarjetas el modelo por equipo mejora un 6 % la desviación frente a la media de la
+  liga en córners por equipo. En el total de córners queda prácticamente igual que la media.
 
 Ninguna de estas estrategias garantiza ganancias:
 - las cuotas cambian;

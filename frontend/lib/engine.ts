@@ -79,6 +79,53 @@ export function priceMatrix(matrix: number[][], s: Sel): Pricing | null {
   return { p_win: win, p_half_win: hw, p_push: push, p_half_lose: hl, p_lose: Math.max(0, 1 - win - hw - push - hl) };
 }
 
+// ---------------------------------------------------------------- conteos (córners, tarjetas, tiros)
+export type CountParams = Record<string, { home: number; away: number; dispersion: number }>;
+export const COUNT_MARKETS: Record<string, [string, "total" | "home" | "away"]> = {
+  corners_total: ["corners", "total"], corners_home: ["corners", "home"], corners_away: ["corners", "away"],
+  cards_total: ["cards", "total"], shots_total: ["shots", "total"], shots_on_target_total: ["sot", "total"],
+};
+/** Binomial negativa (Poisson si la sobredispersión es ~0), igual que el muestreo del servidor. */
+function countPmf(mean: number, disp: number, n: number): number[] {
+  const out = new Array(n).fill(0);
+  if (disp <= 1e-6) {
+    out[0] = Math.exp(-mean);
+    for (let k = 1; k < n; k++) out[k] = out[k - 1] * mean / k;
+  } else {
+    const r = 1 / disp, p = r / (r + mean);
+    out[0] = Math.pow(p, r);
+    for (let k = 1; k < n; k++) out[k] = out[k - 1] * ((k - 1 + r) / k) * (1 - p);
+  }
+  return out;
+}
+export function countDist(c: CountParams | undefined, market: string): number[] | null {
+  const spec = COUNT_MARKETS[market];
+  const prm = spec && c?.[spec[0]];
+  if (!prm) return null;
+  const N = Math.ceil(Math.max(prm.home, prm.away) * 4 + 30);
+  const h = countPmf(prm.home, prm.dispersion, N), a = countPmf(prm.away, prm.dispersion, N);
+  if (spec[1] === "home") return h;
+  if (spec[1] === "away") return a;
+  const t = new Array(2 * N).fill(0);
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) t[i + j] += h[i] * a[j];
+  return t;
+}
+export function priceCounts(c: CountParams | undefined, s: Sel): Pricing | null {
+  if (s.period !== "ft" || s.line == null || !["over", "under"].includes(s.selection)) return null;
+  const dist = countDist(c, s.market);
+  if (!dist) return null;
+  let win = 0, hw = 0, push = 0, hl = 0, tot = 0;
+  dist.forEach((w, x) => {
+    tot += w;
+    const [ga, gb] = split((l) => lineGrade((s.selection === "over" ? 1 : -1) * (x - l)), s.line!);
+    if (ga === 1) win += w; else if (ga === 0.5 && gb === 0.5) hw += w; else if (ga === 0 && gb === 1) push += w; else if (ga === 0 && gb === 0.5) hl += w;
+  });
+  win /= tot; hw /= tot; push /= tot; hl /= tot;
+  return { p_win: win, p_half_win: hw, p_push: push, p_half_lose: hl, p_lose: Math.max(0, 1 - win - hw - push - hl) };
+}
+/** Valora con la matriz de goles o, si es un mercado de conteo, con los parámetros de córners/tarjetas/tiros. */
+export const priceAny = (m: number[][] | undefined, c: CountParams | undefined, s: Sel) => (m ? priceMatrix(m, s) : null) || priceCounts(c, s);
+
 export const pEff = (p: Pricing) => p.p_win + 0.5 * p.p_half_win;
 export const expReturn = (p: Pricing, o: number) => p.p_win * o + p.p_half_win * (o + 1) / 2 + p.p_push + p.p_half_lose * 0.5;
 export const evOf = (p: Pricing, o: number) => expReturn(p, o) - 1;
@@ -118,6 +165,7 @@ export type Req = {
   target_odds: number; min_odds?: number | null; max_odds?: number | null; min_legs: number; max_legs: number;
   sports?: string[] | null; operators?: string[] | null; markets?: string[] | null; risk: "low" | "medium" | "high";
   allow_same_event?: boolean; same_day_only?: boolean; max_hours_ahead?: number | null; include_live?: boolean;
+  use_reference?: boolean;
 };
 export const RISK = {
   low: { min_leg_prob: 0.55, min_edge: 0.02, max_negative_ev: 0.12 },
@@ -231,6 +279,14 @@ function composites(items: Cand[], m: number[][]): Cand[] {
   return out;
 }
 
+/** Antigüedad máxima por fuente (igual que el servidor): OddsPapi gratuito se consulta cada 8 h y las
+ *  cuotas cargadas a mano o por foto valen 2 h; la hora de consulta siempre se muestra. */
+export function staleLimit(source: string | undefined, staleSec: number) {
+  if (source === "oddspapi") return Math.max(staleSec, 9 * 3600);
+  if (source === "manual" || source === "csv" || source === "csv_import" || source === "ocr") return Math.max(staleSec, 2 * 3600);
+  return staleSec;
+}
+
 export type OpInfo = { key: string; name: string; status: string; capabilities: any };
 
 export function optimize(all: Cand[], req: Req, ops: OpInfo[], matrices: Record<string, number[][]>, staleSec = 900, liveStaleSec = 60, now = Date.now()) {
@@ -251,7 +307,7 @@ export function optimize(all: Cand[], req: Req, ops: OpInfo[], matrices: Record<
     if (req.max_hours_ahead && st - now > req.max_hours_ahead * 3600e3) return drop("fuera de la ventana temporal"), false;
     if (req.same_day_only && new Date(st).toLocaleDateString("es-CO", { timeZone: "America/Bogota" }) !== today) return drop("no es del mismo día"), false;
     const age = (now - new Date(c.captured_at).getTime()) / 1000;
-    if (age > (c.is_live ? liveStaleSec : staleSec)) return drop("cuota desactualizada"), false;
+    if (age > (c.is_live ? liveStaleSec : staleLimit(c.source, staleSec))) return drop("cuota desactualizada"), false;
     if (!c.data_sufficient) return drop("datos insuficientes para el modelo"), false;
     if (c.probability < prof.min_leg_prob) return drop("probabilidad por debajo del perfil de riesgo"), false;
     if (c.odds < 1.03) return drop("cuota demasiado baja"), false;
@@ -310,7 +366,7 @@ export function validate(sol: Sol, events: Record<string, any>, op: OpInfo | und
   const legs = sol.legs.flatMap((c) => c.components || [c]);
   const bad = legs.filter((c) => !events[c.event_id] || (!c.is_live && events[c.event_id].status !== "scheduled")).map((c) => c.event);
   add("encuentros_confirmados", !bad.length, bad.length ? `Problemas: ${bad.join(", ")}` : "Todos los encuentros existen y no han comenzado");
-  const stale = legs.filter((c) => (now - new Date(c.captured_at).getTime()) / 1000 > staleSec).map((c) => c.selection);
+  const stale = legs.filter((c) => (now - new Date(c.captured_at).getTime()) / 1000 > staleLimit(c.source, staleSec)).map((c) => c.selection);
   const ts = legs.map((c) => new Date(c.captured_at).getTime());
   const hm = (t: number) => new Date(t).toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" });
   add("cuotas_vigentes", !stale.length, stale.length ? `Cuotas desactualizadas: ${stale.join("; ")}` : `Consultadas entre ${hm(Math.min(...ts))} y ${hm(Math.max(...ts))}`);
@@ -384,7 +440,7 @@ const OPP = ["asian_handicap", "spread", "games_handicap", "set_handicap"];
 export function surebets(quotes: any[], stake = 100000, staleSec = 900, now = Date.now()) {
   const books: Record<string, Record<string, any>> = {};
   for (const q of quotes) {
-    if ((now - new Date(q.captured_at).getTime()) / 1000 > (q.is_live || q.live ? 60 : staleSec)) continue;
+    if ((now - new Date(q.captured_at).getTime()) / 1000 > (q.is_live || q.live ? 60 : staleLimit(q.source, staleSec))) continue;
     let key: string | null = null;
     if (q.market === "1x2") key = `${q.event_id}|1x2`;
     else if (TWO[q.market]) key = `${q.event_id}|${q.market}|${q.line ?? ""}|${q.player ?? ""}`;
@@ -407,6 +463,81 @@ export function surebets(quotes: any[], stake = 100000, staleSec = 900, now = Da
       warning: "Verifique cada cuota en la casa antes de apostar: las cuotas cambian, las casas pueden anular cuotas erróneas y limitar cuentas que hacen arbitraje." });
   }
   return out.sort((a, b) => b.profit_pct - a.profit_pct);
+}
+
+// ---------------------------------------------------------------- cuotas retrasadas
+export type RefFair = Record<string, Record<string, { p_fair: number; ref_operator: string; ref_odds: number; ref_first_odds: number;
+  ref_moved_pp: number; ref_changed_at: string | null; ref_captured_at: string }>>;
+/** Igual que backend/app/services/stale_lines.py: cuota colombiana contra el precio justo de la referencia. */
+export function staleLines(coQuotes: any[], ref: RefFair, events: Record<string, any>, names: Record<string, string>, minEdge = 0.02, staleSec = 900, now = Date.now()) {
+  const out: any[] = [];
+  for (const q of coQuotes) {
+    const r = ref[String(q.event_id)]?.[q.selection_key];
+    const ev = events[q.event_id];
+    if (!r || !ev || ev.status !== "scheduled" || new Date(ev.start_time).getTime() <= now) continue;
+    if ((now - new Date(q.captured_at).getTime()) / 1000 > staleLimit(q.source, staleSec)) continue;
+    const edge = q.odds * r.p_fair - 1;
+    if (edge < minEdge) continue;
+    const coChanged = q.provider_ts || q.captured_at;
+    const late = r.ref_moved_pp >= 0.02 && !!r.ref_changed_at && r.ref_changed_at > coChanged;
+    out.push({ event_id: q.event_id, event: q.event, start_time: ev.start_time, selection_key: q.selection_key, selection: q.selection_label,
+      operator: q.operator, operator_name: names[q.operator] || q.operator, odds: q.odds, fair_odds: 1 / r.p_fair, edge, source: q.source,
+      co_changed_at: coChanged, captured_at: q.captured_at, ...r, status: late ? "retrasada" : "sobre_mercado",
+      explanation: late ? `${r.ref_operator} pasó de ${r.ref_first_odds.toFixed(2)} a ${r.ref_odds.toFixed(2)} y ${q.operator} sigue pagando ${q.odds.toFixed(2)}`
+        : `${q.operator} paga ${q.odds.toFixed(2)} y la cuota justa del mercado es ${(1 / r.p_fair).toFixed(2)}` });
+  }
+  return out.sort((a, b) => b.edge - a.edge);
+}
+
+// ---------------------------------------------------------------- bonos y apuestas gratis
+export type BonusKind = "freebet_snr" | "freebet_sr" | "qualifying";
+/**
+ * Cubre una apuesta en la casa del bono con los resultados complementarios en otras casas
+ * para que el resultado sea el mismo pase lo que pase.
+ * - freebet_snr: apuesta gratis sin devolución del importe (paga F·(o−1)).
+ * - freebet_sr: apuesta gratis con devolución (paga F·o).
+ * - qualifying: apuesta con dinero real exigida para liberar un bono (se busca perder lo mínimo).
+ */
+export function coverPlan(kind: BonusKind, amount: number, backOdds: number, coverOdds: number[]) {
+  const pay = kind === "freebet_snr" ? amount * (backOdds - 1) : amount * backOdds;
+  const covers = coverOdds.map((o) => ({ odds: o, stake: pay / o }));
+  const coverTotal = covers.reduce((t, c) => t + c.stake, 0);
+  const result = kind === "qualifying" ? pay - amount - coverTotal : pay - coverTotal;
+  return { pay, covers, cover_total: coverTotal, result, conversion: result / amount,
+    cash_needed: (kind === "qualifying" ? amount : 0) + coverTotal };
+}
+
+const COMPLEMENT: Record<string, Record<string, string[]>> = {
+  "1x2": { home: ["draw", "away"], draw: ["home", "away"], away: ["home", "draw"] },
+  total_goals: { over: ["under"], under: ["over"] }, btts: { yes: ["no"], no: ["yes"] }, dnb: { home: ["away"], away: ["home"] },
+  double_chance: { "1X": ["away"], X2: ["home"], "12": ["draw"] },
+  corners_total: { over: ["under"], under: ["over"] }, cards_total: { over: ["under"], under: ["over"] },
+};
+/** Busca entre todas las cuotas colombianas las mejores formas de convertir un bono en saldo. */
+export function bonusPlans(quotes: any[], o: { operator: string; kind: BonusKind; amount: number; min_odds: number; same_house_cover: boolean },
+  names: Record<string, string>, staleSec = 900, now = Date.now()) {
+  const fresh = quotes.filter((q) => (now - new Date(q.captured_at).getTime()) / 1000 <= staleLimit(q.source, staleSec) && !q.player);
+  const byGroup: Record<string, any[]> = {};
+  for (const q of fresh) {
+    if (!COMPLEMENT[q.market]) continue;
+    (byGroup[`${q.event_id}|${q.market}|${q.line ?? ""}`] ||= []).push(q);
+  }
+  const plans: any[] = [];
+  for (const qs of Object.values(byGroup)) {
+    for (const back of qs.filter((q) => q.operator === o.operator && q.odds >= o.min_odds)) {
+      const need = COMPLEMENT[back.market][back.selection];
+      if (!need) continue;
+      const legs = need.map((sel) => qs.filter((q) => q.selection === sel && (o.same_house_cover || q.operator !== o.operator))
+        .sort((a, b) => b.odds - a.odds)[0]);
+      if (legs.some((l) => !l)) continue;
+      const plan = coverPlan(o.kind, o.amount, back.odds, legs.map((l) => l.odds));
+      plans.push({ event_id: back.event_id, event: back.event, start_time: back.start_time, market: back.market, line: back.line,
+        back: { selection: back.selection_label, operator: back.operator, operator_name: names[back.operator] || back.operator, odds: back.odds, stake: o.amount, captured_at: back.captured_at },
+        ...plan,
+        covers: legs.map((l, i) => ({ selection: l.selection_label, operator: l.operator, operator_name: names[l.operator] || l.operator, odds: l.odds, stake: plan.covers[i].stake, captured_at: l.captured_at })) });
+    }
+  }
+  return plans.sort((a, b) => b.result - a.result).slice(0, 25);
 }
 
 // ---------------------------------------------------------------- calculadora

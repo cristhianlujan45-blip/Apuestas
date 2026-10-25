@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from ..models import Alert
 from .arbitrage import surebets_from_db
 from .predictions import build_candidates, value_bets
+from .stale_lines import stale_lines
 
 log = logging.getLogger(__name__)
 WEB_URL = "https://cristhianlujan45-blip.github.io/Apuestas"
@@ -32,6 +33,12 @@ def current_alerts(db: Session, min_ev: float = 0.03) -> list[dict]:
         out.append({"id": _id("sb", s["event_id"], s["market"], s["line"], *[(l["operator"], l["odds"]) for l in s["legs"]]),
                     "kind": "surebet", "event_id": s["event_id"], "priority": 5,
                     "title": f"Surebet {s['profit_pct']:.2f} % · {s['event']}", "body": legs, "value": s["profit_pct"]})
+    for r in stale_lines(db, min_edge=min_ev)[:10]:
+        out.append({"id": _id("sl", r["event_id"], r["selection_key"], r["operator"], r["odds"]), "kind": "stale_line",
+                    "event_id": r["event_id"], "priority": 4 if r["status"] == "retrasada" else 3,
+                    "title": f"Cuota {'retrasada' if r['status'] == 'retrasada' else 'sobre el mercado'} {r['edge'] * 100:+.1f} % · {r['event']}",
+                    "body": f"{r['selection']} @ {r['odds']:.2f} en {r['operator_name']}: {r['explanation']}",
+                    "value": r["edge"] * 100})
     cands, _, _ = build_candidates(db)
     for v in value_bets([c for c in cands if c.data_sufficient], min_ev)[:15]:
         out.append({"id": _id("ev", v["event_id"], v["selection_key"], v["operator"], v["odds"]), "kind": "value",
@@ -52,7 +59,7 @@ def push_ntfy(db: Session, topic: str | None, max_per_run: int = 5) -> dict:
         for a in new[:max_per_run]:
             r = c.post(f"https://ntfy.sh/{topic}", content=a["body"].encode(),
                        headers={"Title": a["title"].encode("utf-8").decode("latin-1", "ignore"),
-                                "Priority": str(a["priority"]), "Tags": "moneybag" if a["kind"] == "surebet" else "chart_with_upwards_trend",
+                                "Priority": str(a["priority"]), "Tags": {"surebet": "moneybag", "stale_line": "hourglass"}.get(a["kind"], "chart_with_upwards_trend"),
                                 "Click": f"{WEB_URL}/partido/?id={a['event_id']}"})
             if r.status_code < 300:
                 db.add(Alert(kind="push_sent", severity="info", message=a["title"], payload={"id": a["id"]}))

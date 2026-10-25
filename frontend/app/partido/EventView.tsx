@@ -4,6 +4,41 @@ import { DistributionChart, OddsHistoryChart } from "@/components/charts";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, ProbBar, StatusBadge } from "@/components/ui";
 import { bogota, num, odds, pct, signedPct, STATUS_LABEL } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
+import { COUNT_MARKETS, fairOdds, pEff, priceCounts, type CountParams } from "@/lib/engine";
+
+const COUNT_ROWS: { market: string; label: string; lines: number[] }[] = [
+  { market: "corners_total", label: "Córners totales", lines: [7.5, 8.5, 9.5, 10.5, 11.5] },
+  { market: "corners_home", label: "Córners del local", lines: [3.5, 4.5, 5.5, 6.5] },
+  { market: "corners_away", label: "Córners del visitante", lines: [2.5, 3.5, 4.5, 5.5] },
+  { market: "cards_total", label: "Tarjetas totales", lines: [2.5, 3.5, 4.5, 5.5] },
+  { market: "shots_on_target_total", label: "Tiros al arco totales", lines: [6.5, 7.5, 8.5, 9.5] },
+];
+
+function CountsCard({ counts, home, away }: { counts: CountParams; home: string; away: string }) {
+  const rows = COUNT_ROWS.filter((r) => counts[COUNT_MARKETS[r.market][0]]);
+  if (!rows.length) return null;
+  return (
+    <Card title="Córners, tarjetas y tiros: cuota justa del modelo">
+      <div className="mb-2 flex flex-wrap gap-3 text-xs text-ink-2 num">
+        {counts.corners && <span>Córners esperados: {home} {num(counts.corners.home, 1)} · {away} {num(counts.corners.away, 1)}</span>}
+        {counts.cards && <span>Tarjetas esperadas: {num(counts.cards.home + counts.cards.away, 1)}</span>}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="data min-w-[560px]">
+          <thead><tr><th>Mercado</th><th>Línea</th><th>P(más)</th><th>Cuota justa más</th><th>P(menos)</th><th>Cuota justa menos</th></tr></thead>
+          <tbody>{rows.flatMap((r) => r.lines.map((l) => {
+            const o = priceCounts(counts, { market: r.market, selection: "over", line: l, player: null, period: "ft" });
+            const u = priceCounts(counts, { market: r.market, selection: "under", line: l, player: null, period: "ft" });
+            if (!o || !u) return null;
+            return <tr key={r.market + l}><td>{r.label}</td><td className="num">{l}</td><td className="num">{pct(pEff(o))}</td><td className="num">{odds(fairOdds(o))}</td>
+              <td className="num">{pct(pEff(u))}</td><td className="num">{odds(fairOdds(u))}</td></tr>;
+          }))}</tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[11px] text-ink-muted">Modelo de fuerza por equipo (binomial negativa) entrenado con los córners, tarjetas y tiros reales de cada liga. Si su casa paga más que la cuota justa, la apuesta tiene valor esperado positivo; cargue esa cuota en «Cuotas desde foto» o en Configuración para valorarla.</p>
+    </Card>
+  );
+}
 
 const COMPONENT_LABEL: Record<string, string> = {
   dixon_coles: "Dixon-Coles (MAP bayesiano)", poisson: "Poisson", bivariate_poisson: "Poisson bivariado",
@@ -84,6 +119,8 @@ export default function EventView({ id }: { id: string }) {
           </Card>
         </div>
       )}
+
+      {m.counts && <CountsCard counts={m.counts} home={ev.home} away={ev.away} />}
 
       <Card title="Mercados: modelo vs operadores colombianos" right={
         <select className="input max-w-xs" value={market} onChange={(e) => setMarket(e.target.value)}>

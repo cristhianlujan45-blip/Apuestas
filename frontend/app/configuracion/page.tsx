@@ -2,7 +2,9 @@
 import { useEffect, useState } from "react";
 import { Card, ErrorBox, PageHeader, StatusBadge } from "@/components/ui";
 import { api, getToken, isStatic, serverUrl, setServerUrl, setToken } from "@/lib/api";
-import { MARKET_LABEL, MATRIX_MARKETS } from "@/lib/engine";
+import { COUNT_MARKETS, MARKET_LABEL, MATRIX_MARKETS } from "@/lib/engine";
+import { loadBankroll, saveBankroll } from "@/lib/bankroll";
+import { BACKUP_KEYS, setSyncConfig, syncConfig, syncNow } from "@/lib/sync";
 import { bogota, cop } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 
@@ -142,9 +144,12 @@ const SELECTIONS: Record<string, string[]> = {
   "1x2": ["home", "draw", "away"], double_chance: ["1X", "X2", "12"], dnb: ["home", "away"], total_goals: ["over", "under"],
   btts: ["yes", "no"], correct_score: ["1-0", "2-0", "2-1", "0-0", "1-1", "2-2", "0-1", "0-2", "1-2"], asian_handicap: ["home", "away"],
   european_handicap: ["home", "draw", "away"], team_total_home: ["over", "under"], team_total_away: ["over", "under"],
+  corners_total: ["over", "under"], corners_home: ["over", "under"], corners_away: ["over", "under"], cards_total: ["over", "under"],
+  shots_on_target_total: ["over", "under"],
 };
 const SEL_ES: Record<string, string> = { home: "Local", away: "Visitante", draw: "Empate", over: "Más de", under: "Menos de", yes: "Sí", no: "No" };
-const NEEDS_LINE = ["total_goals", "asian_handicap", "european_handicap", "team_total_home", "team_total_away"];
+const NEEDS_LINE = ["total_goals", "asian_handicap", "european_handicap", "team_total_home", "team_total_away", "corners_total",
+  "corners_home", "corners_away", "cards_total", "shots_on_target_total"];
 
 function parseCsv(text: string): Record<string, string>[] {
   const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim());
@@ -173,7 +178,7 @@ function DeviceOdds() {
         <div><label className="label">Casa</label><select className="input" value={f.operator} onChange={(e) => setF({ ...f, operator: e.target.value })}>
           {(ops.data?.operators || []).filter((o: any) => o.status === "authorized").map((o: any) => <option key={o.key} value={o.key}>{o.name}</option>)}</select></div>
         <div><label className="label">Mercado</label><select className="input" value={f.market} onChange={(e) => setF({ ...f, market: e.target.value, selection: SELECTIONS[e.target.value][0] })}>
-          {MATRIX_MARKETS.map((m) => <option key={m} value={m}>{MARKET_LABEL[m]}</option>)}</select></div>
+          {[...MATRIX_MARKETS, ...Object.keys(COUNT_MARKETS).filter((m) => m !== "shots_total")].map((m) => <option key={m} value={m}>{MARKET_LABEL[m]}</option>)}</select></div>
         <div><label className="label">Selección</label><select className="input" value={f.selection} onChange={(e) => setF({ ...f, selection: e.target.value })}>
           {SELECTIONS[f.market].map((x) => <option key={x} value={x}>{SEL_ES[x] || x}</option>)}</select></div>
         {NEEDS_LINE.includes(f.market) && <div><label className="label">Línea</label><input className="input" inputMode="decimal" placeholder="2.5" value={f.line} onChange={(e) => setF({ ...f, line: e.target.value })} /></div>}
@@ -198,7 +203,6 @@ function DeviceOdds() {
 }
 
 
-const BACKUP_KEYS = ["manual_quotes", "bets", "parlays", "limits", "alerts_enabled", "alerts_min_ev", "data_url", "server_url"];
 
 function Backup() {
   const [txt, setTxt] = useState("");
@@ -235,6 +239,50 @@ function Backup() {
       </div>
       <textarea className="input mt-3 h-24 font-mono text-[11px]" placeholder="…o pegue aquí el texto de una copia para restaurarla" value={txt} onChange={(e) => setTxt(e.target.value)} />
       {msg && <p className="mt-2 text-xs text-ink-2">{msg}</p>}
+    </Card>
+  );
+}
+
+function Sync() {
+  const [cfg, setCfg] = useState({ token: "", gist_id: null as string | null, last_sync: null as string | null });
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { const c = syncConfig(); setCfg({ token: c.token, gist_id: c.gist_id, last_sync: c.last_sync }); }, []);
+  const run = async () => {
+    setBusy(true); setMsg("");
+    try { setSyncConfig({ token: cfg.token.trim() }); setMsg(await syncNow()); const c = syncConfig(); setCfg({ token: c.token, gist_id: c.gist_id, last_sync: c.last_sync }); }
+    catch (e: any) { setMsg(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Card title="Sincronizar entre dispositivos">
+      <p className="text-xs text-ink-muted">Use un Gist secreto de su propia cuenta de GitHub para tener las mismas apuestas, cuotas y ajustes en el celular y en la web. Cree un token en GitHub → Settings → Developer settings → Personal access tokens (solo permiso «gist») y péguelo aquí en cada dispositivo. El token se guarda únicamente en este dispositivo.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <input className="input max-w-md" type="password" placeholder="Token de GitHub (permiso gist)" value={cfg.token} onChange={(e) => setCfg({ ...cfg, token: e.target.value })} />
+        <button className="btn-primary" disabled={busy || !cfg.token.trim()} onClick={run}>{busy ? "Sincronizando…" : "Sincronizar ahora"}</button>
+        {cfg.token && <button className="btn-ghost" onClick={() => { setSyncConfig({ token: "", gist_id: null, last_hash: null, last_sync: null }); setCfg({ token: "", gist_id: null, last_sync: null }); setMsg("Sincronización desactivada en este dispositivo."); }}>Desactivar</button>}
+      </div>
+      {cfg.gist_id && <p className="mt-2 text-xs text-ink-2">Gist: {cfg.gist_id}{cfg.last_sync ? ` · última sincronización ${bogota(cfg.last_sync)}` : ""}. Se sincroniza solo al abrir la app y cada 10 minutos.</p>}
+      {msg && <p className="mt-2 text-xs text-ink-2">{msg}</p>}
+    </Card>
+  );
+}
+
+function BankrollCard() {
+  const [b, setB] = useState(loadBankroll());
+  const [ok, setOk] = useState(false);
+  return (
+    <Card title="Banca y tamaño de apuesta">
+      <p className="text-xs text-ink-muted">Con su banca, la app sugiere cuánto apostar en cada oportunidad: una fracción de Kelly según la ventaja estimada, nunca más del tope por apuesta. La banca actual se calcula con sus apuestas liquidadas en «Mis apuestas».</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div><label className="label">Banca inicial (COP)</label><input type="number" className="input" value={b.initial_cop || ""} onChange={(e) => setB({ ...b, initial_cop: +e.target.value })} /></div>
+        <div><label className="label">Fracción de Kelly</label>
+          <select className="input" value={b.kelly_fraction} onChange={(e) => setB({ ...b, kelly_fraction: +e.target.value })}>
+            <option value={0.1}>1/10 (muy prudente)</option><option value={0.25}>1/4 (recomendado)</option><option value={0.5}>1/2 (agresivo)</option></select></div>
+        <div><label className="label">Tope por apuesta</label>
+          <select className="input" value={b.max_pct} onChange={(e) => setB({ ...b, max_pct: +e.target.value })}>
+            <option value={0.01}>1 % de la banca</option><option value={0.02}>2 % de la banca</option><option value={0.05}>5 % de la banca</option></select></div>
+      </div>
+      <button className="btn-primary mt-3" onClick={() => { saveBankroll(b); setOk(true); setTimeout(() => setOk(false), 2000); }}>{ok ? "Guardado" : "Guardar"}</button>
     </Card>
   );
 }
@@ -320,6 +368,8 @@ function StaticSettings() {
       <Alerts />
       {me && <Limits me={me} reload={loadMe} />}
       <LiveServer />
+      <BankrollCard />
+      <Sync />
       <Backup />
     </div>
   );
@@ -353,6 +403,8 @@ function ServerSettings() {
       <ManualOdds />
       <Alerts />
       <LiveServer />
+      <BankrollCard />
+      <Sync />
       <Backup />
       {me?.is_admin && <Admin />}
       {status.data?.ingestion?.length > 0 && (

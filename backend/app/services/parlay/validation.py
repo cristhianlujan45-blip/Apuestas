@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from ...engine.markets import Outcomes, joint_same_event
-from .optimizer import Candidate, ParlaySolution
+from .optimizer import Candidate, ParlaySolution, _limit
 
 # Pares de mercados del mismo evento que se excluyen mutuamente o son redundantes
 CONFLICTS = [
@@ -39,7 +39,7 @@ def validate(sol: ParlaySolution, events: dict[int, dict], operator: dict, now: 
     stale = []
     for c in legs:
         age = (now - c.captured_at).total_seconds()
-        if age > (live_stale_seconds if c.is_live else stale_seconds):
+        if age > _limit(c, stale_seconds, live_stale_seconds):
             stale.append(f"{c.selection_label} ({int(age // 60)} min)")
     newest = max(c.captured_at for c in legs)
     oldest = min(c.captured_at for c in legs)

@@ -119,6 +119,9 @@ class ParlayRequest:
     same_day_only: bool = False
     max_hours_ahead: float | None = 72
     include_live: bool = False
+    # Si no hay cuotas colombianas que cumplan los filtros, usar cuotas de referencia
+    # internacionales (claramente señaladas) para que el usuario las verifique en su casa.
+    use_reference: bool = True
 
     def band(self) -> tuple[float, float]:
         lo = self.min_odds if self.min_odds else max(1.01, self.target_odds * 0.9)
@@ -303,6 +306,12 @@ class OptimizationResult:
     messages: list[str]
 
 
+def _limit(c: "Candidate", stale_seconds: int, live_stale_seconds: int) -> int:
+    from ..odds import stale_limit
+
+    return live_stale_seconds if c.is_live else max(stale_seconds, stale_limit(c.source, False, stale_seconds))
+
+
 def filter_candidates(cands: list[Candidate], req: ParlayRequest, authorized: set[str],
                       now: datetime | None = None, stale_seconds: int = 900,
                       live_stale_seconds: int = 60) -> tuple[list[Candidate], dict]:
@@ -340,7 +349,7 @@ def filter_candidates(cands: list[Candidate], req: ParlayRequest, authorized: se
             drop("no es del mismo día")
             continue
         age = (now - c.captured_at).total_seconds()
-        if age > (live_stale_seconds if c.is_live else stale_seconds):
+        if age > _limit(c, stale_seconds, live_stale_seconds):
             drop("cuota desactualizada")
             continue
         if not c.data_sufficient:

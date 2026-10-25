@@ -35,11 +35,14 @@ export function parse(text: string, events: { id: number; home: string; away: st
     }
     for (const l of block) {
       const n = norm(l);
-      const tot = n.match(/(mas|over|menos|under)\s*(de\s*)?(\d[.,]5)/);
-      const o = oddsIn(l.replace(/\d[.,]5(?!\d)/, ""));
+      const tot = n.match(/(mas|over|menos|under)\s*(de\s*)?(\d{1,2}[.,]5)/);
+      const o = oddsIn(l.replace(/\d{1,2}[.,]5(?!\d)/, ""));
       if (tot && o.length) {
         const over = tot[1] === "mas" || tot[1] === "over";
-        out.push({ include: true, event_id: best.id, market: "total_goals", selection: over ? "over" : "under", line: +tot[3].replace(",", "."), odds: o[0], source: l });
+        // Córners y tarjetas se reconocen por la palabra en la línea o en el título del bloque anterior
+        const ctx = n + " " + norm(block[Math.max(0, block.indexOf(l) - 1)] || "");
+        const market = /corner|tiros de esquina/.test(ctx) ? "corners_total" : /tarjeta|card/.test(ctx) ? "cards_total" : "total_goals";
+        out.push({ include: true, event_id: best.id, market, selection: over ? "over" : "under", line: +tot[3].replace(",", "."), odds: o[0], source: l });
       }
       if (/ambos/.test(n) && o.length >= 1) {
         out.push({ include: true, event_id: best.id, market: "btts", selection: /\bno\b/.test(n) ? "no" : "yes", line: null, odds: o[0], source: l });
